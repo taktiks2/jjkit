@@ -1,0 +1,27 @@
+# --- Go ---
+# Compiled binary (matches the module name) and build/test artifacts
+/jjkit
+*.exe
+*.test
+*.out
+*.prof
+# Coverage
+coverage.txt
+coverage.html
+
+# --- Project-local tooling ---
+# GOBIN set by flake.nix shellHook (`go install` output)
+/.gobin/
+
+# --- direnv ---
+/.direnv/
+.envrc.local
+
+# --- Nix ---
+# `nix build` result symlinks
+/result
+/result-*
+
+# --- Editor / OS ---
+.DS_Store
+*.swp
