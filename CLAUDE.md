@@ -2,6 +2,10 @@
 
 ## Agent skills
 
+### Commit messages
+
+All commits follow Conventional Commits — `<type>[(scope)][!]: <description>` (the first `jj -m` is the subject). See `docs/agents/commit-style.md`.
+
 ### Issue tracker
 
 Issues and PRDs are tracked as GitHub issues (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
