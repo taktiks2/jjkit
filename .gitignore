@@ -22,6 +22,10 @@ coverage.html
 /result
 /result-*
 
+# --- Claude Code ---
+# Committed: .claude/settings.json (shared harness). Personal overrides stay local.
+/.claude/settings.local.json
+
 # --- Editor / OS ---
 .DS_Store
 *.swp

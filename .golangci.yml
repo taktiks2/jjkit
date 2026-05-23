@@ -1,0 +1,14 @@
+# golangci-lint config (v2). Keeps `just lint` and CI in lock-step.
+version: "2"
+
+linters:
+  # Standard set: errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - revive
+    - misspell
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
