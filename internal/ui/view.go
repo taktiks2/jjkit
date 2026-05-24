@@ -11,12 +11,16 @@ var errStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 // lipglossHeight は文字列の行数（高さ）を返す。viewport の高さ計算に使う。
 func lipglossHeight(s string) int { return lipgloss.Height(s) }
 
-// View は viewport を上、フッターを下に並べて返す。v2 は string でなく tea.View を返す。
+// View は viewport を上、フッターを下に並べて返す。v2 は string でなく tea.View を返し、
+// 全画面表示(alt-screen)は tea.View.AltScreen フィールドで指定する。
 func (m Model) View() tea.View {
-	if !m.ready {
-		return tea.NewView("loading...")
+	content := "loading..."
+	if m.ready {
+		content = m.viewport.View() + "\n" + m.footerView()
 	}
-	return tea.NewView(m.viewport.View() + "\n" + m.footerView())
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
 }
 
 // footerView は通常は help の1行ヒント、エラー時は赤いエラー行を返す。
