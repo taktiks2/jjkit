@@ -26,6 +26,9 @@ coverage.html
 # Committed: .claude/settings.json (shared harness). Personal overrides stay local.
 /.claude/settings.local.json
 
+# --- Working scratch (design notes, throwaway specs — not tracked) ---
+/tmp/
+
 # --- Editor / OS ---
 .DS_Store
 *.swp
