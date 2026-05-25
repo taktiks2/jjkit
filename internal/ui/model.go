@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"slices"
+
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -10,6 +12,27 @@ import (
 	"github.com/taktiks2/jjkit/internal/jjlog"
 )
 
+type pane int
+
+const (
+	paneLog pane = iota
+	paneFiles
+	paneDiff
+	paneBookmarks
+	paneOplog
+)
+
+var focusCycle = []pane{paneLog, paneFiles, paneBookmarks}
+
+func (m Model) cycleFocus() Model {
+	cur := slices.Index(focusCycle, m.focus)
+	if cur < 0 {
+		panic("focus not in focusCycle")
+	}
+	m.focus = focusCycle[(cur+1)%len(focusCycle)]
+	return m
+}
+
 // loadLog の結果メッセージ。成功は logLoadedMsg、失敗は logErrMsg。
 type (
 	logLoadedMsg struct{ log *jjlog.Log }
@@ -18,6 +41,7 @@ type (
 
 // Model は Log ペインの状態。
 type Model struct {
+	focus    pane
 	keys     keyMap
 	help     help.Model
 	viewport viewport.Model
@@ -78,6 +102,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		switch {
+		case key.Matches(msg, m.keys.Tab):
+			m = m.cycleFocus()
+			return m, nil
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Up):

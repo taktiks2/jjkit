@@ -12,6 +12,7 @@ type keyMap struct {
 	Down    key.Binding
 	Refresh key.Binding
 	Help    key.Binding
+	Tab     key.Binding
 	Quit    key.Binding
 }
 
@@ -21,6 +22,7 @@ func newKeyMap() keyMap {
 		Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 		Refresh: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		Help:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Tab:     key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus")),
 		Quit:    key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
 }
