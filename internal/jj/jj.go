@@ -30,6 +30,42 @@ func LogRaw(template string) ([]byte, error) {
 	return out, nil
 }
 
+func diffArgs(rev string) []string {
+	return []string{"diff", "--no-pager", "--color", "always", "-r", rev}
+}
+
+func diffFileArgs(rev, path string) []string {
+	return []string{"diff", "--no-pager", "--color", "always", "-r", rev, path}
+}
+
+func diffSummaryArgs(rev string) []string {
+	return []string{"diff", "--no-pager", "--summary", "-r", rev}
+}
+
+func Diff(rev string) ([]byte, error) {
+	out, err := exec.Command("jj", diffArgs(rev)...).Output()
+	if err != nil {
+		return nil, wrap("jj diff", err)
+	}
+	return out, nil
+}
+
+func DiffFile(rev, path string) ([]byte, error) {
+	out, err := exec.Command("jj", diffFileArgs(rev, path)...).Output()
+	if err != nil {
+		return nil, wrap("jj diff", err)
+	}
+	return out, nil
+}
+
+func DiffSummary(rev string) ([]byte, error) {
+	out, err := exec.Command("jj", diffSummaryArgs(rev)...).Output()
+	if err != nil {
+		return nil, wrap("jj diff", err)
+	}
+	return out, nil
+}
+
 // wrap は exec のエラーを読みやすくする。jj が非ゼロ終了したときは stderr の内容を、
 // それ以外（jj が見つからない等）はラップしたエラーを返す。
 func wrap(what string, err error) error {
