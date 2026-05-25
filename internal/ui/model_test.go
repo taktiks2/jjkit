@@ -44,3 +44,23 @@ func TestSelectionClampsAtBounds(t *testing.T) {
 		t.Errorf("down at bottom: selected = %d, want 1", down.selected)
 	}
 }
+
+// Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回し、Diff/Oplog を飛ばすこと。
+func TestTabCyclesFocus(t *testing.T) {
+	m := New()
+	if m.focus != paneLog {
+		t.Fatalf("initial focus = %v, want paneLog", m.focus)
+	}
+	m = m.cycleFocus()
+	if m.focus != paneFiles {
+		t.Errorf("after 1 Tab: focus = %v, want paneFiles", m.focus)
+	}
+	m = m.cycleFocus()
+	if m.focus != paneBookmarks {
+		t.Errorf("after 2 Tabs: focus = %v, want paneBookmarks", m.focus)
+	}
+	m = m.cycleFocus()
+	if m.focus != paneLog {
+		t.Errorf("after 3 Tabs: focus = %v, want paneLog (wrap)", m.focus)
+	}
+}
