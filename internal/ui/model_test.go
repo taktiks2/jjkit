@@ -67,6 +67,26 @@ func TestMoveRoutedByFocus(t *testing.T) {
 	}
 }
 
+// currentDiffReq が (focus, 選択) から「今 Diff に出すべき内容」を正しく導くこと。
+// Log focus なら change 全体（file=""）、Files focus なら選択ファイル単位。
+func TestCurrentDiffReqByFocus(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.files = []jjdiff.FileChange{{Status: "M", Path: "src/x.go"}}
+	m.fileSel = 0
+
+	m.focus = paneLog
+	if got := m.currentDiffReq(); got != (diffReq{change: "aaaa"}) {
+		t.Errorf("Log focus: got %+v, want whole-change {aaaa}", got)
+	}
+
+	m.focus = paneFiles
+	if got := m.currentDiffReq(); got != (diffReq{change: "aaaa", file: "src/x.go"}) {
+		t.Errorf("Files focus: got %+v, want file-level {aaaa, src/x.go}", got)
+	}
+}
+
 // Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回し、Diff/Oplog を飛ばすこと。
 func TestTabCyclesFocus(t *testing.T) {
 	m := New()
