@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/taktiks2/jjkit/internal/jjdiff"
 	"github.com/taktiks2/jjkit/internal/jjlog"
 )
 
@@ -21,8 +22,8 @@ func TestLogLoadedSelectsWorkingCopy(t *testing.T) {
 	m.width, m.height, m.ready = 80, 24, true
 	updated, _ := m.Update(logLoadedMsg{log: twoRowLog()})
 	got := updated.(Model)
-	if got.selected != 1 {
-		t.Errorf("selected = %d, want 1 (the @ row)", got.selected)
+	if got.logSel != 1 {
+		t.Errorf("logSel = %d, want 1 (the @ row)", got.logSel)
 	}
 }
 
@@ -32,16 +33,37 @@ func TestSelectionClampsAtBounds(t *testing.T) {
 	m.width, m.height, m.ready = 80, 24, true
 	m.log = twoRowLog()
 
-	m.selected = 0
+	m.logSel = 0
 	up := moveSelection(m, -1)
-	if up.selected != 0 {
-		t.Errorf("up at top: selected = %d, want 0", up.selected)
+	if up.logSel != 0 {
+		t.Errorf("up at top: logSel = %d, want 0", up.logSel)
 	}
 
-	m.selected = 1
+	m.logSel = 1
 	down := moveSelection(m, +1)
-	if down.selected != 1 {
-		t.Errorf("down at bottom: selected = %d, want 1", down.selected)
+	if down.logSel != 1 {
+		t.Errorf("down at bottom: logSel = %d, want 1", down.logSel)
+	}
+}
+
+// ↑/↓ が今フォーカスしているペインのカーソルだけを動かすこと（focus=Log なら logSel、
+// focus=Files なら fileSel）。これが2階層選択の核。
+func TestMoveRoutedByFocus(t *testing.T) {
+	m := New()
+	m.log = twoRowLog() // 2 rows
+	m.files = []jjdiff.FileChange{{Status: "M", Path: "x"}, {Status: "A", Path: "y"}}
+	m.logSel, m.fileSel = 0, 0
+
+	m.focus = paneLog
+	m = moveSelection(m, +1)
+	if m.logSel != 1 || m.fileSel != 0 {
+		t.Errorf("Log focus +1: logSel=%d fileSel=%d, want 1,0", m.logSel, m.fileSel)
+	}
+
+	m.focus = paneFiles
+	m = moveSelection(m, +1)
+	if m.fileSel != 1 || m.logSel != 1 {
+		t.Errorf("Files focus +1: fileSel=%d logSel=%d, want 1,1", m.fileSel, m.logSel)
 	}
 }
 
