@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/taktiks2/jjkit/internal/jj"
+	"github.com/taktiks2/jjkit/internal/jjdiff"
 	"github.com/taktiks2/jjkit/internal/jjlog"
 )
 
@@ -46,7 +47,9 @@ type Model struct {
 	help     help.Model
 	viewport viewport.Model
 	log      *jjlog.Log
-	selected int
+	logSel   int
+	files    []jjdiff.FileChange
+	fileSel  int
 	width    int
 	height   int
 	ready    bool
@@ -93,7 +96,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case logLoadedMsg:
 		m.log = msg.log
 		m.err = nil
-		m.selected = m.log.WorkingCopyRow()
+		m.logSel = m.log.WorkingCopyRow()
 		m.refreshContent()
 		m.scrollToSelected()
 		return m, nil
@@ -125,19 +128,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // moveSelection はカーソルを delta だけ動かす（範囲内にクランプ）。
 func moveSelection(m Model, delta int) Model {
+	switch m.focus {
+	case paneFiles:
+		return moveFileSel(m, delta)
+	case paneLog:
+		return moveLogSel(m, delta)
+	default:
+		return m
+	}
+}
+
+func moveLogSel(m Model, delta int) Model {
 	if m.log == nil || len(m.log.Rows) == 0 {
 		return m
 	}
-	m.selected += delta
-	if m.selected < 0 {
-		m.selected = 0
-	}
-	if last := len(m.log.Rows) - 1; m.selected > last {
-		m.selected = last
-	}
+	m.logSel = clamp(m.logSel+delta, 0, len(m.log.Rows)-1)
 	m.refreshContent()
 	m.scrollToSelected()
 	return m
+}
+
+func moveFileSel(m Model, delta int) Model {
+	if len(m.files) == 0 {
+		return m
+	}
+	m.fileSel = clamp(m.fileSel+delta, 0, len(m.files)-1)
+	return m
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // layoutViewport は viewport をフッターの上の領域いっぱいに合わせる。
@@ -155,7 +181,7 @@ func (m *Model) refreshContent() {
 	if m.log == nil {
 		return
 	}
-	start, end := m.log.LineRange(m.selected)
+	start, end := m.log.LineRange(m.logSel)
 	m.viewport.SetContent(RenderContent(m.log.Lines(), start, end, m.viewport.Width()))
 }
 
@@ -164,7 +190,7 @@ func (m *Model) scrollToSelected() {
 	if m.log == nil || m.viewport.Height() <= 0 {
 		return
 	}
-	start, end := m.log.LineRange(m.selected)
+	start, end := m.log.LineRange(m.logSel)
 	m.viewport.EnsureVisible(end-1, 0, 0)
 	m.viewport.EnsureVisible(start, 0, 0)
 }
