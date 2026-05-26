@@ -21,10 +21,7 @@ func highlightLine(line string, width int) string {
 	// 行中の reset をすべて「reset + 背景ON」に置換し、reset で消えた背景を直後に貼り直す。
 	body := strings.ReplaceAll(line, reset, reset+selBG)
 	// 行末まで帯にするための空白の数。len() ではなく表示幅で計算する（負なら 0）。
-	pad := width - ansi.StringWidth(line)
-	if pad < 0 {
-		pad = 0
-	}
+	pad := max(0, width-ansi.StringWidth(line))
 	// 先頭で背景ON → 本体 → パディング → 最後に reset で背景OFF、で行全体が1本の帯になる。
 	return selBG + body + strings.Repeat(" ", pad) + reset
 }

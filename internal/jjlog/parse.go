@@ -2,7 +2,10 @@
 // change 単位の行にパースし、画面行を change へ対応付ける。
 package jjlog
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Sentinel はテンプレートが各 change に埋め込むマーカーを囲む文字列。色ラベルの付かない
 // 素のテキストなので jj の --color always でも壊れず、表示前に剥がせる。
@@ -86,17 +89,15 @@ func (l *Log) Lines() []string {
 
 // WorkingCopyRow は @ の Row の index を返す。@ が無ければ 0。
 func (l *Log) WorkingCopyRow() int {
-	for i, r := range l.Rows {
-		if r.IsWC {
-			return i
-		}
+	if i := slices.IndexFunc(l.Rows, func(r Row) bool { return r.IsWC }); i >= 0 {
+		return i
 	}
-	return 0
+	return 0 // 空 revset 等で @ が無いときの意図的な既定値（go-style.md ルール1の例外）
 }
 
 // LineRange は row が占める flat 行の範囲 [start, end) を返す。
 func (l *Log) LineRange(row int) (start, end int) {
-	for i := 0; i < row && i < len(l.Rows); i++ {
+	for i := range min(row, len(l.Rows)) {
 		start += len(l.Rows[i].Lines)
 	}
 	end = start

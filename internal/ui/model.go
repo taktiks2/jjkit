@@ -142,7 +142,7 @@ func moveLogSel(m Model, delta int) Model {
 	if m.log == nil || len(m.log.Rows) == 0 {
 		return m
 	}
-	m.logSel = clamp(m.logSel+delta, 0, len(m.log.Rows)-1)
+	m.logSel = max(0, min(m.logSel+delta, len(m.log.Rows)-1))
 	m.refreshContent()
 	m.scrollToSelected()
 	return m
@@ -152,18 +152,8 @@ func moveFileSel(m Model, delta int) Model {
 	if len(m.files) == 0 {
 		return m
 	}
-	m.fileSel = clamp(m.fileSel+delta, 0, len(m.files)-1)
+	m.fileSel = max(0, min(m.fileSel+delta, len(m.files)-1))
 	return m
-}
-
-func clamp(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
 }
 
 // layoutViewport は viewport をフッターの上の領域いっぱいに合わせる。
