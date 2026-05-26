@@ -26,3 +26,4 @@ implementation language is Go (a bubbletea TUI). Version control is **jj**
 - Flag violations of the glossary, the ADRs, or the commit convention.
 - Surface uncertainty rather than guessing; this repo values conservative,
   reversible changes (see ADR-0003).
+- Flag deviations from `docs/agents/go-style.md` (Go 1.21+ idioms).

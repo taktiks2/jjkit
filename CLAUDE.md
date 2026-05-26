@@ -17,3 +17,8 @@ Canonical triage roles map 1:1 to default label strings (`needs-triage`, `needs-
 ### Domain docs
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Go style
+
+Go 1.21+ idioms required (slices/maps/min/max/range int/clear). See
+`docs/agents/go-style.md`.
