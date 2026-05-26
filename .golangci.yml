@@ -7,6 +7,10 @@ linters:
   enable:
     - revive
     - misspell
+    # Go 1.21+ スタイル統一のための追加 (docs/agents/go-style.md 参照)
+    - intrange       # for i := 0; i < n; i++ → for i := range n  (Go 1.22+)
+    - copyloopvar    # `i := i` イディオムを警告 (Go 1.22+ で暗黙コピー)
+    - usestdlibvars  # http.StatusOK / time.RFC3339 等の stdlib 定数
 
 formatters:
   enable:
