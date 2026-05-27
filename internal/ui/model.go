@@ -101,6 +101,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshContent()
 		m.scrollToSelected()
 		return m, nil
+	case filesLoadedMsg:
+		if msg.change != m.selectedChangeID() {
+			return m, nil // 別 change 宛の古い結果 -> 捨てる
+		}
+		m.files = msg.files
+		m.fileSel = 0
+		return m, nil
 	case logErrMsg:
 		m.err = msg.err
 		return m, nil
@@ -222,4 +229,10 @@ func (m Model) currentDiffReq() diffReq {
 type diffLoadedMsg struct {
 	req diffReq
 	raw []byte
+}
+
+// filesLoadedMsg は jj diff --summary の結果。change で stale 判定する。
+type filesLoadedMsg struct {
+	change string
+	files  []jjdiff.FileChange
 }
