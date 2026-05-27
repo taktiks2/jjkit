@@ -87,6 +87,28 @@ func TestCurrentDiffReqByFocus(t *testing.T) {
 	}
 }
 
+// 非同期ロード結果の stale ガード：移動後に届いた古い diff（req が今の選択と一致しない）は
+// 捨て、現在の選択と一致するものだけ反映すること。Cmd の発火順とは独立にこのロジックが
+// 正しいことを保証する（高速移動・順序逆転シナリオの核）。
+func TestStaleDiffResultIgnored(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.focus = paneLog // currentDiffReq == {change: "aaaa"}
+
+	// 別 change 宛の結果は無視される。
+	stale, _ := m.Update(diffLoadedMsg{req: diffReq{change: "bbbb"}, raw: []byte("STALE")})
+	if got := stale.(Model).diffContent; got != "" {
+		t.Errorf("stale result applied: %q", got)
+	}
+
+	// 現在の選択と一致する結果は反映される。
+	fresh, _ := m.Update(diffLoadedMsg{req: diffReq{change: "aaaa"}, raw: []byte("FRESH")})
+	if got := fresh.(Model).diffContent; got != "FRESH" {
+		t.Errorf("matching result not applied: %q", got)
+	}
+}
+
 // Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回し、Diff/Oplog を飛ばすこと。
 func TestTabCyclesFocus(t *testing.T) {
 	m := New()
