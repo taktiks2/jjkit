@@ -184,3 +184,29 @@ func (m *Model) scrollToSelected() {
 	m.viewport.EnsureVisible(end-1, 0, 0)
 	m.viewport.EnsureVisible(start, 0, 0)
 }
+
+// diffReq は Diff ペインに出すべき内容の識別子。file=="" は change 全体を表す。
+// 非同期ロードの stale 判定にも使う
+type diffReq struct {
+	change string
+	file   string
+}
+
+// selectedChangeID は今 Log で選んでいる change の id（無ければ ""）。
+// 範囲外・nil ガードを集約することで currentDiffReq 等の呼び出し側を綺麗に保つ。
+func (m Model) selectedChangeID() string {
+	if m.log == nil || m.logSel < 0 || m.logSel >= len(m.log.Rows) {
+		return ""
+	}
+	return m.log.Rows[m.logSel].ChangeID
+}
+
+// currentDiffReq は (focus, 選択) から「今 Diff に出すべき内容」を決める。
+// Files にフォーカスしていてファイルがあるときだけファイル単位、それ以外は change 全体。
+func (m Model) currentDiffReq() diffReq {
+	req := diffReq{change: m.selectedChangeID()}
+	if m.focus == paneFiles && m.fileSel >= 0 && m.fileSel < len(m.files) {
+		req.file = m.files[m.fileSel].Path
+	}
+	return req
+}
