@@ -42,18 +42,19 @@ type (
 
 // Model は Log ペインの状態。
 type Model struct {
-	focus    pane
-	keys     keyMap
-	help     help.Model
-	viewport viewport.Model
-	log      *jjlog.Log
-	logSel   int
-	files    []jjdiff.FileChange
-	fileSel  int
-	width    int
-	height   int
-	ready    bool
-	err      error
+	focus       pane
+	keys        keyMap
+	help        help.Model
+	viewport    viewport.Model
+	log         *jjlog.Log
+	logSel      int
+	files       []jjdiff.FileChange
+	fileSel     int
+	width       int
+	height      int
+	ready       bool
+	diffContent string
+	err         error
 }
 
 // New は初期化済みの Model を返す。
@@ -102,6 +103,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case logErrMsg:
 		m.err = msg.err
+		return m, nil
+	case diffLoadedMsg:
+		if msg.req != m.currentDiffReq() {
+			return m, nil // 選択が動いたあとに届いた古い結果 -> 捨てる
+		}
+		m.diffContent = string(msg.raw)
 		return m, nil
 	case tea.KeyPressMsg:
 		switch {
@@ -209,4 +216,10 @@ func (m Model) currentDiffReq() diffReq {
 		req.file = m.files[m.fileSel].Path
 	}
 	return req
+}
+
+// diffLoadedMsg は jj diff の結果。req は「何を要求したか」で stale 判定に使う。
+type diffLoadedMsg struct {
+	req diffReq
+	raw []byte
 }
