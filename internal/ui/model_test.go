@@ -109,6 +109,32 @@ func TestStaleDiffResultIgnored(t *testing.T) {
 	}
 }
 
+// filesLoadedMsg: 選択中の change と一致する結果なら files を入れ、fileSel を 0 にリセット。
+// 別 change 宛の古い結果は無視（こちらも stale ガード）。change が変わったら前の fileSel が
+// 範囲外になる可能性があるので、リセットは正当性のために必要。
+func TestFilesLoadedSetsFilesAndResetsSelection(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.fileSel = 3 // 前の change で動かしていた古い位置
+
+	files := []jjdiff.FileChange{{Status: "M", Path: "a"}, {Status: "A", Path: "b"}}
+	updated, _ := m.Update(filesLoadedMsg{change: "aaaa", files: files})
+	got := updated.(Model)
+	if len(got.files) != 2 {
+		t.Fatalf("files len = %d, want 2", len(got.files))
+	}
+	if got.fileSel != 0 {
+		t.Errorf("fileSel = %d, want 0 (reset)", got.fileSel)
+	}
+
+	// 別 change 宛は無視される。
+	stale, _ := m.Update(filesLoadedMsg{change: "zzzz", files: files})
+	if len(stale.(Model).files) != 0 {
+		t.Errorf("stale files applied: %v", stale.(Model).files)
+	}
+}
+
 // Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回し、Diff/Oplog を飛ばすこと。
 func TestTabCyclesFocus(t *testing.T) {
 	m := New()
