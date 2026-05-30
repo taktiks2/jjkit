@@ -97,6 +97,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyLayout()
 		m.ready = true
 		m.refreshLog()
+		m.refreshFiles()
+		m.refreshDiff()
 		return m, nil
 	case logLoadedMsg:
 		m.log = msg.log
@@ -105,39 +107,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshLog()
 		m.scrollLog()
 		return m, nil
+	case logErrMsg:
+		m.err = msg.err
+		return m, nil
 	case filesLoadedMsg:
 		if msg.change != m.selectedChangeID() {
 			return m, nil // 別 change 宛の古い結果 -> 捨てる
 		}
 		m.files = msg.files
 		m.fileSel = 0
-		return m, nil
-	case logErrMsg:
-		m.err = msg.err
+		m.refreshFiles()
 		return m, nil
 	case diffLoadedMsg:
 		if msg.req != m.currentDiffReq() {
 			return m, nil // 選択が動いたあとに届いた古い結果 -> 捨てる
 		}
 		m.diffContent = string(msg.raw)
+		m.refreshDiff()
 		return m, nil
 	case tea.KeyPressMsg:
 		switch {
-		case key.Matches(msg, m.keys.Tab):
-			m = m.cycleFocus()
-			return m, nil
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Up):
-			return moveSelection(m, -1), nil
+			m = moveSelection(m, -1)
+			return m, m.loadAfterMove()
 		case key.Matches(msg, m.keys.Down):
-			return moveSelection(m, +1), nil
+			m = moveSelection(m, +1)
+			return m, m.loadAfterMove()
+		case key.Matches(msg, m.keys.Tab):
+			m = m.cycleFocus()
+			return m, m.diffCmd()
 		case key.Matches(msg, m.keys.Refresh):
 			return m, loadLog
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
 			m.applyLayout()
 			m.refreshLog()
+			m.refreshFiles()
+			m.refreshDiff()
 			return m, nil
 		}
 	}
@@ -259,4 +267,62 @@ type diffLoadedMsg struct {
 type filesLoadedMsg struct {
 	change string
 	files  []jjdiff.FileChange
+}
+
+// diffCmd は今表示すべき diff（currentDiffReq）を非同期に取りに行く Cmd を返す。
+// 別 goroutine で走り、結果は diffLoadedMsg として Update に届く（stale 判定はそこ）。
+func (m Model) diffCmd() tea.Cmd {
+	req := m.currentDiffReq()
+	if req.change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		var (
+			raw []byte
+			err error
+		)
+		if req.file == "" {
+			raw, err = jj.Diff(req.change)
+		} else {
+			raw, err = jj.DiffFile(req.change, req.file)
+		}
+		if err != nil {
+			return logErrMsg{err}
+		}
+		return diffLoadedMsg{req: req, raw: raw}
+	}
+}
+
+// filesCmd は選択中の change の変更ファイル一覧を取りに行く Cmd を返す。
+func (m Model) filesCmd() tea.Cmd {
+	change := m.selectedChangeID()
+	if change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		raw, err := jj.DiffSummary(change)
+		if err != nil {
+			return logErrMsg{err}
+		}
+		return filesLoadedMsg{change: change, files: jjdiff.ParseSummary(raw)}
+	}
+}
+
+// loadForChange は change が変わったとき（ファイル一覧 + change 全体 diff の両方）に使う。
+// tea.Batch は複数の Cmd を並列に走らせる。
+func (m Model) loadForChange() tea.Cmd {
+	return tea.Batch(m.filesCmd(), m.diffCmd())
+}
+
+// loadAfterMove は移動後にフォーカスに応じた再ロードを返す。
+// Log を動かしたら change が変わったので files + diff、Files を動かしたら diff だけ。
+func (m Model) loadAfterMove() tea.Cmd {
+	switch m.focus {
+	case paneLog:
+		return m.loadForChange()
+	case paneFiles:
+		return m.diffCmd()
+	default:
+		return nil
+	}
 }
