@@ -77,6 +77,26 @@ func TestParseStripsSentinelFromDisplay(t *testing.T) {
 	}
 }
 
+// 実 jj log は change_id.short(8) を色付きで出すので、センチネル間に ANSI が混じる。
+// Parse は ChangeID を素のテキスト（色コード抜き）で保持しなければならない。
+// さもないと `jj diff -r <id>` で「Failed to parse revset」になる（Task 9 で踏んだバグ）。
+func TestParseStripsANSIFromChangeID(t *testing.T) {
+	raw := []byte("◉  " + Sentinel + "\x1b[38;5;5mpnmvvnyx\x1b[39m|1" + Sentinel + " desc\n")
+	log, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(log.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(log.Rows))
+	}
+	if log.Rows[0].ChangeID != "pnmvvnyx" {
+		t.Errorf("ChangeID = %q, want %q (ANSI must be stripped)", log.Rows[0].ChangeID, "pnmvvnyx")
+	}
+	if !log.Rows[0].IsWC {
+		t.Errorf("IsWC = false, want true")
+	}
+}
+
 // containsSentinel はテスト補助: 文字列中にセンチネルが残っていないかを素朴に走査する。
 func containsSentinel(s string) bool {
 	for i := 0; i+len(Sentinel) <= len(s); i++ {
