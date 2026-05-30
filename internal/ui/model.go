@@ -45,7 +45,9 @@ type Model struct {
 	focus       pane
 	keys        keyMap
 	help        help.Model
-	viewport    viewport.Model
+	logVP       viewport.Model
+	filesVP     viewport.Model
+	diffVP      viewport.Model
 	log         *jjlog.Log
 	logSel      int
 	files       []jjdiff.FileChange
@@ -60,9 +62,11 @@ type Model struct {
 // New は初期化済みの Model を返す。
 func New() Model {
 	return Model{
-		keys:     newKeyMap(),
-		help:     help.New(),
-		viewport: viewport.New(),
+		keys:    newKeyMap(),
+		help:    help.New(),
+		logVP:   viewport.New(),
+		filesVP: viewport.New(),
+		diffVP:  viewport.New(),
 	}
 }
 
@@ -90,16 +94,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
-		m.layoutViewport()
+		m.applyLayout()
 		m.ready = true
-		m.refreshContent()
+		m.refreshLog()
 		return m, nil
 	case logLoadedMsg:
 		m.log = msg.log
 		m.err = nil
 		m.logSel = m.log.WorkingCopyRow()
-		m.refreshContent()
-		m.scrollToSelected()
+		m.refreshLog()
+		m.scrollLog()
 		return m, nil
 	case filesLoadedMsg:
 		if msg.change != m.selectedChangeID() {
@@ -132,8 +136,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, loadLog
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
-			m.layoutViewport()
-			m.refreshContent()
+			m.applyLayout()
+			m.refreshLog()
 			return m, nil
 		}
 	}
@@ -157,8 +161,8 @@ func moveLogSel(m Model, delta int) Model {
 		return m
 	}
 	m.logSel = max(0, min(m.logSel+delta, len(m.log.Rows)-1))
-	m.refreshContent()
-	m.scrollToSelected()
+	m.refreshLog()
+	m.scrollLog()
 	return m
 }
 
@@ -170,33 +174,53 @@ func moveFileSel(m Model, delta int) Model {
 	return m
 }
 
-// layoutViewport は viewport をフッターの上の領域いっぱいに合わせる。
-func (m *Model) layoutViewport() {
-	h := m.height - lipglossHeight(m.footerView())
-	if h < 0 {
-		h = 0
-	}
-	m.viewport.SetWidth(m.width)
-	m.viewport.SetHeight(h)
+// applyLayout は computeLayout の外寸から、各 viewport の内寸（枠2 + タイトル1 を除く）を渡す。
+func (m *Model) applyLayout() {
+	footerH := lipglossHeight(m.footerView())
+	l := computeLayout(m.width, m.height, footerH)
+	setVP(&m.logVP, l.log)
+	setVP(&m.filesVP, l.files)
+	setVP(&m.diffVP, l.diff)
 }
 
-// refreshContent は選択範囲を反映した表示テキストを viewport に流し込む。
-func (m *Model) refreshContent() {
+// setVP は外寸 rect から枠(2)とタイトル行(1)を引いた内寸を viewport に渡す。
+func setVP(vp *viewport.Model, r rect) {
+	vp.SetWidth(max(r.w-2, 0))
+	vp.SetHeight(max(r.h-3, 0))
+}
+
+// refreshLog は Log ペインに、選択行ハイライトを乗せた jj log を流す。
+func (m *Model) refreshLog() {
 	if m.log == nil {
 		return
 	}
 	start, end := m.log.LineRange(m.logSel)
-	m.viewport.SetContent(RenderContent(m.log.Lines(), start, end, m.viewport.Width()))
+	m.logVP.SetContent(RenderContent(m.log.Lines(), start, end, m.logVP.Width()))
 }
 
-// scrollToSelected は選択 change が画面内に収まるようスクロールする。
-func (m *Model) scrollToSelected() {
-	if m.log == nil || m.viewport.Height() <= 0 {
+// scrollLog は選択 change が画面内に収まるようスクロールする。
+func (m *Model) scrollLog() {
+	if m.log == nil || m.logVP.Height() <= 0 {
 		return
 	}
 	start, end := m.log.LineRange(m.logSel)
-	m.viewport.EnsureVisible(end-1, 0, 0)
-	m.viewport.EnsureVisible(start, 0, 0)
+	m.logVP.EnsureVisible(end-1, 0, 0)
+	m.logVP.EnsureVisible(start, 0, 0)
+}
+
+// refreshFiles は変更ファイル一覧を「ステータス + パス」の1行に整形し、選択ハイライト付きで流す。
+func (m *Model) refreshFiles() {
+	lines := make([]string, len(m.files))
+	for i, f := range m.files {
+		lines[i] = f.Status + " " + f.Path
+	}
+	m.filesVP.SetContent(RenderContent(lines, m.fileSel, m.fileSel+1, m.filesVP.Width()))
+}
+
+// refreshDiff は保持している diff 本文を Diff viewport に流し、先頭へ戻す。
+func (m *Model) refreshDiff() {
+	m.diffVP.SetContent(m.diffContent)
+	m.diffVP.GotoTop()
 }
 
 // diffReq は Diff ペインに出すべき内容の識別子。file=="" は change 全体を表す。

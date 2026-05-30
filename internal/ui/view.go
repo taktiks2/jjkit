@@ -16,7 +16,7 @@ func lipglossHeight(s string) int { return lipgloss.Height(s) }
 func (m Model) View() tea.View {
 	content := "loading..."
 	if m.ready {
-		content = m.viewport.View() + "\n" + m.footerView()
+		content = m.logVP.View() + "\n" + m.footerView()
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
