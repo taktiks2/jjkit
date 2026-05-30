@@ -5,6 +5,8 @@ package jjlog
 import (
 	"slices"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Sentinel はテンプレートが各 change に埋め込むマーカーを囲む文字列。色ラベルの付かない
@@ -66,7 +68,8 @@ func Parse(raw []byte) (*Log, error) {
 
 		// マーカー行は新しい change の先頭。2個のマーカーに挟まれた payload から
 		// change-id と作業コピーフラグを取り出し、マーカーを除いた表示行で新しい Row を作る。
-		payload := rest[:end]
+		// payload は色コードを剥がす（実 jj は change_id.short(8) を色付きで出すため）。
+		payload := ansi.Strip(rest[:end])
 		display := line[:idx] + rest[end+len(Sentinel):]
 		changeID, wc := payload, false
 		if bar := strings.IndexByte(payload, '|'); bar >= 0 {
