@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/taktiks2/jjkit/internal/jjdiff"
@@ -199,5 +200,45 @@ func TestTabCyclesFocus(t *testing.T) {
 	m = m.cycleFocus()
 	if m.focus != paneLog {
 		t.Errorf("after 3 Tabs: focus = %v, want paneLog (wrap)", m.focus)
+	}
+}
+
+// Issue #3: opResultMsg は new/edit/describe/abandon の jj 実行結果。
+// 成功と失敗を 1 型に統合することで opInFlight の解除漏れを構造的に防ぐ。
+
+// 成功時: opInFlight を false に戻し、refresh Cmd（loadLog + filesCmd + diffCmd の batch）を返す。
+// Cmd の中身は検査せず「非 nil」までを保証する（bubbles の Cmd は不透明な関数）。
+func TestOpResultSuccessClearsFlightAndReturnsRefreshCmd(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "a", Lines: []string{"x"}}}}
+	m.opInFlight = true
+	updated, cmd := m.Update(opResultMsg{err: nil})
+	got := updated.(Model)
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false (cleared on success)")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want non-nil refresh Cmd")
+	}
+	if got.err != nil {
+		t.Errorf("err = %v, want nil (success should clear err)", got.err)
+	}
+}
+
+// 失敗時: opInFlight を false に戻し、err を立て、refresh は走らせない。
+func TestOpResultErrorClearsFlightAndSetsErr(t *testing.T) {
+	m := New()
+	m.opInFlight = true
+	wantErr := errors.New("immutable")
+	updated, cmd := m.Update(opResultMsg{err: wantErr})
+	got := updated.(Model)
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false (cleared on err)")
+	}
+	if got.err != wantErr {
+		t.Errorf("err = %v, want %v", got.err, wantErr)
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (no refresh on err)", cmd)
 	}
 }
