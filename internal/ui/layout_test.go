@@ -2,6 +2,36 @@ package ui
 
 import "testing"
 
+// applyLayout が logVP / filesVP / diffVP すべてに正しい内寸を渡すこと。
+// バグ防止：3つの viewport のうち1つだけ更新して残りを 0×0 のまま放置する
+// 実装ミス（受け入れ基準「リサイズで壊れない」を満たさない）を検出する。
+// 内寸 = rect の外寸 - 枠2 - タイトル1。
+func TestApplyLayoutSizesAllViewports(t *testing.T) {
+	m := New()
+	m.width, m.height = 100, 30
+	m.applyLayout()
+
+	footerH := lipglossHeight(m.footerView())
+	want := computeLayout(100, 30, footerH)
+
+	cases := []struct {
+		name      string
+		gotW, gotH int
+		want      rect
+	}{
+		{"log", m.logVP.Width(), m.logVP.Height(), want.log},
+		{"files", m.filesVP.Width(), m.filesVP.Height(), want.files},
+		{"diff", m.diffVP.Width(), m.diffVP.Height(), want.diff},
+	}
+	for _, c := range cases {
+		wantW := max(c.want.w-2, 0)
+		wantH := max(c.want.h-3, 0)
+		if c.gotW != wantW || c.gotH != wantH {
+			t.Errorf("%s viewport: %dx%d, want %dx%d", c.name, c.gotW, c.gotH, wantW, wantH)
+		}
+	}
+}
+
 // 端末サイズが変わってもレイアウトが壊れないこと（issue #2 の受け入れ条件）。
 // 契約: (1) どの矩形も負にならない、(2) 左カラム幅 + Diff 幅 = 全幅、
 // (3) 左カラム4ペインの高さ合計 = body 高さ（footer を除いた高さ）、
