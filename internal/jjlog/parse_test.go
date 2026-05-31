@@ -106,3 +106,29 @@ func containsSentinel(s string) bool {
 	}
 	return false
 }
+
+// Issue #3: RowByChangeID は ID 一致する Row の index を返す。
+// 用途: refresh 後に「前選択していた change ID」を新ログの中から探して logSel を維持する。
+
+// 見つかれば index を返す。
+func TestRowByChangeIDFound(t *testing.T) {
+	l := &Log{Rows: []Row{
+		{ChangeID: "aaaa"},
+		{ChangeID: "bbbb"},
+		{ChangeID: "cccc"},
+	}}
+	if got := l.RowByChangeID("bbbb"); got != 1 {
+		t.Errorf("RowByChangeID(bbbb) = %d, want 1", got)
+	}
+}
+
+// 見つからなければ -1。"" も -1（空 ID と偶然一致しないよう、明示ガード）。
+func TestRowByChangeIDMissing(t *testing.T) {
+	l := &Log{Rows: []Row{{ChangeID: "aaaa"}}}
+	if got := l.RowByChangeID("zzzz"); got != -1 {
+		t.Errorf("RowByChangeID(zzzz) = %d, want -1", got)
+	}
+	if got := l.RowByChangeID(""); got != -1 {
+		t.Errorf("RowByChangeID(empty) = %d, want -1", got)
+	}
+}

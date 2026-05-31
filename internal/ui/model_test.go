@@ -15,15 +15,62 @@ func twoRowLog() *jjlog.Log {
 	}}
 }
 
-// ログ読込(logLoadedMsg)を受けたら、カーソルが作業コピー(@)の row に合うことを保証する。
-// 「起動時・r 再読込で @ にリセット」という決めた挙動の核。
-func TestLogLoadedSelectsWorkingCopy(t *testing.T) {
+// Issue #3 (Q 仕様): refresh 後の logSel は「前選択の change ID を新ログから探す → 無ければ @」。
+// これにより describe 後や r キーで「場所を失わない」UX になる。
+
+// 前選択の change ID が new log にもあれば、その row に居続ける。
+// 例: describe 後の refresh で同じ change を編集していたら、そこに留まる。
+func TestLogLoadedPreservesSelection(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
-	updated, _ := m.Update(logLoadedMsg{log: twoRowLog()})
-	got := updated.(Model)
-	if got.logSel != 1 {
-		t.Errorf("logSel = %d, want 1 (the @ row)", got.logSel)
+	// 前の log: row0=a, row1=b(@). 選択は row0=a。
+	m.log = &jjlog.Log{Rows: []jjlog.Row{
+		{ChangeID: "a", Lines: []string{"a0"}},
+		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
+	}}
+	m.logSel = 0
+	// new log: row0=x, row1=a, row2=b(@). a は row1 に移動。
+	newLog := &jjlog.Log{Rows: []jjlog.Row{
+		{ChangeID: "x", Lines: []string{"x0"}},
+		{ChangeID: "a", Lines: []string{"a0"}},
+		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
+	}}
+	updated, _ := m.Update(logLoadedMsg{log: newLog})
+	if got := updated.(Model).logSel; got != 1 {
+		t.Errorf("logSel = %d, want 1 (a moved to row1)", got)
+	}
+}
+
+// 前選択の change ID が new log に無ければ WC row に fallback（abandon の典型ケース）。
+func TestLogLoadedFallsBackToWC(t *testing.T) {
+	m := New()
+	m.width, m.height, m.ready = 80, 24, true
+	m.log = &jjlog.Log{Rows: []jjlog.Row{
+		{ChangeID: "gone", Lines: []string{"x"}},
+	}}
+	m.logSel = 0
+	newLog := &jjlog.Log{Rows: []jjlog.Row{
+		{ChangeID: "a", Lines: []string{"a0"}},
+		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
+	}}
+	updated, _ := m.Update(logLoadedMsg{log: newLog})
+	if got := updated.(Model).logSel; got != 1 {
+		t.Errorf("logSel = %d, want 1 (WC fallback)", got)
+	}
+}
+
+// 初回ロード (m.log == nil): selectedChangeID が "" なので必ず WC fallback。
+func TestLogLoadedFirstLoadGoesToWC(t *testing.T) {
+	m := New()
+	m.width, m.height, m.ready = 80, 24, true
+	// m.log は nil (初期状態)
+	newLog := &jjlog.Log{Rows: []jjlog.Row{
+		{ChangeID: "a", Lines: []string{"a0"}},
+		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
+	}}
+	updated, _ := m.Update(logLoadedMsg{log: newLog})
+	if got := updated.(Model).logSel; got != 1 {
+		t.Errorf("logSel = %d, want 1 (WC on first load)", got)
 	}
 }
 
