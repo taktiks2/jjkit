@@ -79,3 +79,69 @@ func wrap(what string, err error) error {
 	}
 	return fmt.Errorf("%s: %w", what, err)
 }
+
+func newArgs(change string) []string {
+	return []string{"new", "--no-pager", change}
+}
+
+// New は <change> を親に持つ空の新 change を作り、@ をそこに移す。
+func New(change string) error {
+	_, err := exec.Command("jj", newArgs(change)...).Output()
+	if err != nil {
+		return wrap("jj new", err)
+	}
+	return nil
+}
+
+func editArgs(change string) []string {
+	return []string{"edit", "--no-pager", change}
+}
+
+// Edit は @ を <change> に移す。
+func Edit(change string) error {
+	_, err := exec.Command("jj", editArgs(change)...).Output()
+	if err != nil {
+		return wrap("jj edit", err)
+	}
+	return nil
+}
+
+func describeArgs(change, msg string) []string {
+	return []string{"describe", "--no-pager", "-r", change, "-m", msg}
+}
+
+// Describe は <change> の description を <msg> に置き換える。空文字も許容。
+func Describe(change, msg string) error {
+	_, err := exec.Command("jj", describeArgs(change, msg)...).Output()
+	if err != nil {
+		return wrap("jj describe", err)
+	}
+	return nil
+}
+
+func abandonArgs(change string) []string {
+	return []string{"abandon", "--no-pager", change}
+}
+
+// Abandon は <change> を破棄する。
+func Abandon(change string) error {
+	_, err := exec.Command("jj", abandonArgs(change)...).Output()
+	if err != nil {
+		return wrap("jj abandon", err)
+	}
+	return nil
+}
+
+func descriptionArgs(change string) []string {
+	return []string{"log", "--no-pager", "--no-graph", "-T", "description", "-r", change}
+}
+
+// Description は <change> の description 文字列を返す（describe modal の seed 用）。
+// 末尾改行を trim して返す。空 description でも空文字列が返り、エラーにはならない。
+func Description(change string) (string, error) {
+	out, err := exec.Command("jj", descriptionArgs(change)...).Output()
+	if err != nil {
+		return "", wrap("jj log", err)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
