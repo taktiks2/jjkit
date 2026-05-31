@@ -156,6 +156,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Tab):
 			m = m.cycleFocus()
 			return m, m.diffCmd()
+		case key.Matches(msg, m.keys.New):
+			if m.opInFlight {
+				return m, nil
+			}
+			cmd := m.jjNewCmd()
+			if cmd == nil {
+				return m, nil
+			}
+			m.opInFlight = true
+			return m, cmd
 		case key.Matches(msg, m.keys.Refresh):
 			return m, loadLog
 		case key.Matches(msg, m.keys.Help):
@@ -342,5 +352,17 @@ func (m Model) loadAfterMove() tea.Cmd {
 		return m.diffCmd()
 	default:
 		return nil
+	}
+}
+
+// jjNewCmd は選択中の change に対する jj new を非同期で実行する Cmd を返す。
+// 結果は opResultMsg として Update に届く。
+func (m Model) jjNewCmd() tea.Cmd {
+	change := m.selectedChangeID()
+	if change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return opResultMsg{err: jj.New(change)}
 	}
 }
