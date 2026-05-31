@@ -15,6 +15,7 @@ type keyMap struct {
 	Tab     key.Binding
 	Quit    key.Binding
 	New     key.Binding
+	Edit    key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -26,17 +27,18 @@ func newKeyMap() keyMap {
 		Tab:     key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus")),
 		Quit:    key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 		New:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
+		Edit:    key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 	}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.New, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.New, k.Edit, k.Refresh, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down},
-		{k.New, k.Refresh},
+		{k.New, k.Edit, k.Refresh},
 		{k.Tab, k.Help, k.Quit},
 	}
 }

@@ -166,6 +166,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.opInFlight = true
 			return m, cmd
+		case key.Matches(msg, m.keys.Edit):
+			if m.opInFlight {
+				return m, nil
+			}
+			cmd := m.jjEditCmd()
+			if cmd == nil {
+				return m, nil
+			}
+			m.opInFlight = true
+			return m, cmd
 		case key.Matches(msg, m.keys.Refresh):
 			return m, loadLog
 		case key.Matches(msg, m.keys.Help):
@@ -364,5 +374,16 @@ func (m Model) jjNewCmd() tea.Cmd {
 	}
 	return func() tea.Msg {
 		return opResultMsg{err: jj.New(change)}
+	}
+}
+
+// jjEditCmd は選択中の change に @ を移す jj edit を非同期で実行する Cmd を返す。
+func (m Model) jjEditCmd() tea.Cmd {
+	change := m.selectedChangeID()
+	if change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return opResultMsg{err: jj.Edit(change)}
 	}
 }
