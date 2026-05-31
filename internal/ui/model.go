@@ -101,9 +101,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshDiff()
 		return m, nil
 	case logLoadedMsg:
+		prevID := m.selectedChangeID()
 		m.log = msg.log
 		m.err = nil
-		m.logSel = m.log.WorkingCopyRow()
+		if i := m.log.RowByChangeID(prevID); i >= 0 {
+			m.logSel = i
+		} else {
+			m.logSel = m.log.WorkingCopyRow()
+		}
 		m.refreshLog()
 		m.scrollLog()
 		return m, nil

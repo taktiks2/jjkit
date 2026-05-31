@@ -117,3 +117,12 @@ func appendContinuating(log *Log, line string) {
 		log.Rows[n-1].Lines = append(log.Rows[n-1].Lines, line)
 	}
 }
+
+// RowByChangeID は ID 一致する Row の index を返す。無ければ -1。
+// 空文字列は決して一致しない（呼び出し側で「選択無し」を表現したいときに渡せる）。
+func (l *Log) RowByChangeID(id string) int {
+	if id == "" {
+		return -1
+	}
+	return slices.IndexFunc(l.Rows, func(r Row) bool { return r.ChangeID == id })
+}
