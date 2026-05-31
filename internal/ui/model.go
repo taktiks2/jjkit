@@ -38,6 +38,7 @@ func (m Model) cycleFocus() Model {
 type (
 	logLoadedMsg struct{ log *jjlog.Log }
 	logErrMsg    struct{ err error }
+	opResultMsg  struct{ err error }
 )
 
 // Model は Log ペインの状態。
@@ -57,6 +58,10 @@ type Model struct {
 	ready       bool
 	diffContent string
 	err         error
+
+	// Issue #3: 書き込み操作 (n/e/d/a) 中のフラグ。
+	// 真の間は n/e/d/a を吸う（読み込み系 r/Up/Down/Tab は通す）。
+	opInFlight bool
 }
 
 // New は初期化済みの Model を返す。
@@ -115,6 +120,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case logErrMsg:
 		m.err = msg.err
 		return m, nil
+	case opResultMsg:
+		m.opInFlight = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		return m, tea.Batch(loadLog, m.filesCmd(), m.diffCmd())
 	case filesLoadedMsg:
 		if msg.change != m.selectedChangeID() {
 			return m, nil // 別 change 宛の古い結果 -> 捨てる
