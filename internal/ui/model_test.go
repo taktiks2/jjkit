@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/taktiks2/jjkit/internal/jjdiff"
 	"github.com/taktiks2/jjkit/internal/jjlog"
 )
@@ -240,5 +242,57 @@ func TestOpResultErrorClearsFlightAndSetsErr(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Errorf("cmd = %v, want nil (no refresh on err)", cmd)
+	}
+}
+
+// keyPress はテスト用に printable rune の tea.KeyPressMsg を組み立てる。
+// Code に加えて Text を入れるのが慣用 (key.Matches は KeyPressMsg.String() を見るが、
+// String() は Text が非空ならそれを返すため)。
+func keyPress(r rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: r, Text: string(r)}
+}
+
+// Issue #3: 'n' (new) キー — 選択 change に対する jj new を非同期発射、opInFlight ガード付き。
+
+// 'n' 押下: opInFlight=true、Cmd 非 nil を返す。
+func TestKeyNewFiresOpAndSetsFlight(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	updated, cmd := m.Update(keyPress('n'))
+	got := updated.(Model)
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want non-nil jj new Cmd")
+	}
+}
+
+// opInFlight 中の 'n' は無視 (Cmd nil、フラグ変化なし)。
+func TestKeyNewIgnoredWhenOpInFlight(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.opInFlight = true
+	updated, cmd := m.Update(keyPress('n'))
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (gated by opInFlight)", cmd)
+	}
+	if !updated.(Model).opInFlight {
+		t.Errorf("opInFlight = false, want true (unchanged)")
+	}
+}
+
+// 選択 change が無い（空 log）場合の 'n' は no-op。
+func TestKeyNewIgnoredWhenNoSelection(t *testing.T) {
+	m := New()
+	// m.log は nil
+	updated, cmd := m.Update(keyPress('n'))
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (no selection)", cmd)
+	}
+	if updated.(Model).opInFlight {
+		t.Errorf("opInFlight = true, want false (no op fired)")
 	}
 }
