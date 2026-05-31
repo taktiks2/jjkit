@@ -23,6 +23,15 @@ const (
 	paneOplog
 )
 
+type mode int
+
+const (
+	modeNormal            mode = iota
+	modeDescribingLoading      // describe seed fetch 中
+	modeDescribing             // textinput 編集中
+	modeConfirmingAbandon      // abandon 確認待ち
+)
+
 var focusCycle = []pane{paneLog, paneFiles, paneBookmarks}
 
 func (m Model) cycleFocus() Model {
@@ -62,6 +71,7 @@ type Model struct {
 	// Issue #3: 書き込み操作 (n/e/d/a) 中のフラグ。
 	// 真の間は n/e/d/a を吸う（読み込み系 r/Up/Down/Tab は通す）。
 	opInFlight bool
+	mode       mode
 }
 
 // New は初期化済みの Model を返す。
@@ -144,48 +154,98 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshDiff()
 		return m, nil
 	case tea.KeyPressMsg:
-		switch {
-		case key.Matches(msg, m.keys.Quit):
-			return m, tea.Quit
-		case key.Matches(msg, m.keys.Up):
-			m = moveSelection(m, -1)
-			return m, m.loadAfterMove()
-		case key.Matches(msg, m.keys.Down):
-			m = moveSelection(m, +1)
-			return m, m.loadAfterMove()
-		case key.Matches(msg, m.keys.Tab):
-			m = m.cycleFocus()
-			return m, m.diffCmd()
-		case key.Matches(msg, m.keys.New):
-			if m.opInFlight {
-				return m, nil
-			}
-			cmd := m.jjNewCmd()
-			if cmd == nil {
-				return m, nil
-			}
-			m.opInFlight = true
-			return m, cmd
-		case key.Matches(msg, m.keys.Edit):
-			if m.opInFlight {
-				return m, nil
-			}
-			cmd := m.jjEditCmd()
-			if cmd == nil {
-				return m, nil
-			}
-			m.opInFlight = true
-			return m, cmd
-		case key.Matches(msg, m.keys.Refresh):
-			return m, loadLog
-		case key.Matches(msg, m.keys.Help):
-			m.help.ShowAll = !m.help.ShowAll
-			m.applyLayout()
-			m.refreshLog()
-			m.refreshFiles()
-			m.refreshDiff()
+		switch m.mode {
+		case modeConfirmingAbandon:
+			return m.updateConfirmingAbandon(msg)
+		default:
+			return m.updateNormal(msg)
+		}
+	}
+	return m, nil
+}
+
+// jjAbandonCmd は選択中の change を破棄する jj abandon を非同期で実行する Cmd を返す。
+func (m Model) jjAbandonCmd() tea.Cmd {
+	change := m.selectedChangeID()
+	if change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return opResultMsg{err: jj.Abandon(change)}
+	}
+}
+
+// updateConfirmingAbandon は abandon 確認 modal 中のキー処理。
+// Confirm → jj abandon 発射、Cancel → 戻る、それ以外は吸う。
+func (m Model) updateConfirmingAbandon(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Confirm):
+		cmd := m.jjAbandonCmd()
+		m.mode = modeNormal
+		if cmd == nil {
 			return m, nil
 		}
+		m.opInFlight = true
+		return m, cmd
+	case key.Matches(msg, m.keys.Cancel):
+		m.mode = modeNormal
+		return m, nil
+	}
+	return m, nil // それ以外 (j/k 等)は吸う
+}
+
+// updateNormal は通常モードのキー処理。既存の KeyPressMsg 処理を切り出したもの。
+func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Quit):
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.Up):
+		m = moveSelection(m, -1)
+		return m, m.loadAfterMove()
+	case key.Matches(msg, m.keys.Down):
+		m = moveSelection(m, +1)
+		return m, m.loadAfterMove()
+	case key.Matches(msg, m.keys.Tab):
+		m = m.cycleFocus()
+		return m, m.diffCmd()
+	case key.Matches(msg, m.keys.New):
+		if m.opInFlight {
+			return m, nil
+		}
+		cmd := m.jjNewCmd()
+		if cmd == nil {
+			return m, nil
+		}
+		m.opInFlight = true
+		return m, cmd
+	case key.Matches(msg, m.keys.Edit):
+		if m.opInFlight {
+			return m, nil
+		}
+		cmd := m.jjEditCmd()
+		if cmd == nil {
+			return m, nil
+		}
+		m.opInFlight = true
+		return m, cmd
+	case key.Matches(msg, m.keys.Abandon):
+		if m.opInFlight {
+			return m, nil
+		}
+		if m.selectedChangeID() == "" {
+			return m, nil
+		}
+		m.mode = modeConfirmingAbandon
+		return m, nil
+	case key.Matches(msg, m.keys.Refresh):
+		return m, loadLog
+	case key.Matches(msg, m.keys.Help):
+		m.help.ShowAll = !m.help.ShowAll
+		m.applyLayout()
+		m.refreshLog()
+		m.refreshFiles()
+		m.refreshDiff()
+		return m, nil
 	}
 	return m, nil
 }
