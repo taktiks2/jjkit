@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -326,5 +327,86 @@ func TestKeyEditIgnoredWhenOpInFlight(t *testing.T) {
 	}
 	if !updated.(Model).opInFlight {
 		t.Errorf("opInFlight changed, want unchanged")
+	}
+}
+
+// Issue #3: 'a' (abandon) + 確認 modal — mode enum を初導入。
+// 破壊的操作なので confirm dialog で挟んでから jj abandon を発射する。
+
+// 'a' 押下: mode=confirmingAbandon、Cmd は nil (まだ何も発射しない)。
+func TestKeyAbandonEntersConfirming(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	updated, cmd := m.Update(keyPress('a'))
+	got := updated.(Model)
+	if got.mode != modeConfirmingAbandon {
+		t.Errorf("mode = %v, want modeConfirmingAbandon", got.mode)
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (no op yet, just modal)", cmd)
+	}
+}
+
+// confirmingAbandon 中の Enter: jjAbandonCmd 発射、mode=normal に戻る、opInFlight=true。
+func TestConfirmYesFiresAbandonCmd(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeConfirmingAbandon
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal (back to normal after confirm)", got.mode)
+	}
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true (op fired)")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want non-nil jj abandon Cmd")
+	}
+}
+
+// confirmingAbandon 中の Esc: mode=normal、opInFlight 変化なし、Cmd nil。
+func TestConfirmNoReturnsToNormal(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeConfirmingAbandon
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal (Esc cancels)", got.mode)
+	}
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false (cancel doesn't trigger op)")
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+}
+
+// confirmingAbandon 中の j (= Down): logSel は動かさない。modal 中はナビゲーションを吸う。
+func TestNormalKeysIgnoredInConfirmingMode(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{
+		{ChangeID: "a", Lines: []string{"x"}},
+		{ChangeID: "b", IsWC: true, Lines: []string{"y"}},
+	}}
+	m.logSel = 0
+	m.mode = modeConfirmingAbandon
+	updated, _ := m.Update(keyPress('j'))
+	if got := updated.(Model).logSel; got != 0 {
+		t.Errorf("logSel = %d, want 0 (j ignored in confirming mode)", got)
+	}
+}
+
+// confirmingAbandon 中の footer はヒントを出す。
+func TestFooterShowsConfirmHint(t *testing.T) {
+	m := New()
+	m.mode = modeConfirmingAbandon
+	got := m.footerView()
+	if !strings.Contains(got, "abandon") {
+		t.Errorf("footer = %q, want to contain 'abandon'", got)
 	}
 }
