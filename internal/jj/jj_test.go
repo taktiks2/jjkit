@@ -42,3 +42,54 @@ func TestDiffSummaryArgs(t *testing.T) {
 		t.Errorf("diffSummaryArgs = %v, want %v", got, want)
 	}
 }
+
+// Issue #3: new/edit/describe/abandon/description 5関数の引数組み立てを固定する。
+// 実行部分（実 jj が要る）は手動確認に委ねる。
+
+// newArgs: jj new --no-pager <change>
+func TestNewArgs(t *testing.T) {
+	got := newArgs("abc123")
+	want := []string{"new", "--no-pager", "abc123"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("newArgs = %v, want %v", got, want)
+	}
+}
+
+// editArgs: jj edit --no-pager <change>
+func TestEditArgs(t *testing.T) {
+	got := editArgs("abc123")
+	want := []string{"edit", "--no-pager", "abc123"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("editArgs = %v, want %v", got, want)
+	}
+}
+
+// describeArgs: jj describe --no-pager -r <change> -m <msg>
+// -r で対象 change を明示し、-m で description 文字列を渡す（対話モード回避）。
+func TestDescribeArgs(t *testing.T) {
+	got := describeArgs("abc123", "feat: hello")
+	want := []string{"describe", "--no-pager", "-r", "abc123", "-m", "feat: hello"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("describeArgs = %v, want %v", got, want)
+	}
+}
+
+// abandonArgs: jj abandon --no-pager <change>
+func TestAbandonArgs(t *testing.T) {
+	got := abandonArgs("abc123")
+	want := []string{"abandon", "--no-pager", "abc123"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("abandonArgs = %v, want %v", got, want)
+	}
+}
+
+// descriptionArgs: jj log --no-pager --no-graph -T description -r <change>
+// describe modal の seed 取得用。--no-graph で graph 装飾を抑え、-T description で
+// description 文字列だけを評価する。
+func TestDescriptionArgs(t *testing.T) {
+	got := descriptionArgs("abc123")
+	want := []string{"log", "--no-pager", "--no-graph", "-T", "description", "-r", "abc123"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("descriptionArgs = %v, want %v", got, want)
+	}
+}
