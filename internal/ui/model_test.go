@@ -296,3 +296,35 @@ func TestKeyNewIgnoredWhenNoSelection(t *testing.T) {
 		t.Errorf("opInFlight = true, want false (no op fired)")
 	}
 }
+
+// Issue #3: 'e' (edit) キー — 選択 change に @ を移す。Task 4 と同形パターン。
+
+// 'e' 押下: opInFlight=true、Cmd 非 nil を返す。
+func TestKeyEditFiresOpAndSetsFlight(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	updated, cmd := m.Update(keyPress('e'))
+	got := updated.(Model)
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want non-nil jj edit Cmd")
+	}
+}
+
+// opInFlight 中の 'e' は無視。
+func TestKeyEditIgnoredWhenOpInFlight(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.opInFlight = true
+	updated, cmd := m.Update(keyPress('e'))
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (gated)", cmd)
+	}
+	if !updated.(Model).opInFlight {
+		t.Errorf("opInFlight changed, want unchanged")
+	}
+}
