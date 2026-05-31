@@ -15,9 +15,9 @@ func TestApplyLayoutSizesAllViewports(t *testing.T) {
 	want := computeLayout(100, 30, footerH)
 
 	cases := []struct {
-		name      string
+		name       string
 		gotW, gotH int
-		want      rect
+		want       rect
 	}{
 		{"log", m.logVP.Width(), m.logVP.Height(), want.log},
 		{"files", m.filesVP.Width(), m.filesVP.Height(), want.files},
