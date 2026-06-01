@@ -410,3 +410,90 @@ func TestFooterShowsConfirmHint(t *testing.T) {
 		t.Errorf("footer = %q, want to contain 'abandon'", got)
 	}
 }
+
+// Issue #3: 'd' (describe) — seed fetch フェーズ。
+// 'd' 押下時に describing modal を直接出すのではなく、
+// まず jj log -T description で現在の description を非同期取得 (loading modal)。
+// 取得結果が届いたら次の Task 8 で textinput に切り替える。
+// stale ガード 2 種: target が動いた / mode が既に変わった。
+
+// 'd' 押下: mode=describingLoading、descTarget セット、Cmd 非 nil。
+func TestKeyDescribeEntersLoadingAndFiresDescCmd(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	updated, cmd := m.Update(keyPress('d'))
+	got := updated.(Model)
+	if got.mode != modeDescribingLoading {
+		t.Errorf("mode = %v, want modeDescribingLoading", got.mode)
+	}
+	if got.descTarget != "abc" {
+		t.Errorf("descTarget = %q, want %q", got.descTarget, "abc")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want descCmd")
+	}
+}
+
+// descLoadedMsg: target が現在の selectedChangeID と違えば stale で捨てる。
+func TestDescLoadedStaleByTargetIgnored(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribingLoading
+	m.descTarget = "abc"
+	updated, _ := m.Update(descLoadedMsg{target: "stale", desc: "old", err: nil})
+	got := updated.(Model)
+	if got.mode != modeDescribingLoading {
+		t.Errorf("mode = %v, want modeDescribingLoading (stale ignored)", got.mode)
+	}
+}
+
+// descLoadedMsg: 既に modeNormal (loading 中に Esc) なら捨てる。
+func TestDescLoadedStaleByModeIgnored(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeNormal // 既にキャンセル済み
+	m.descTarget = "abc"
+	updated, _ := m.Update(descLoadedMsg{target: "abc", desc: "x", err: nil})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal (kept)", got.mode)
+	}
+}
+
+// descLoadedMsg(err): modeNormal に戻り、err を立てる。
+func TestDescLoadedErrorReturnsToNormal(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribingLoading
+	m.descTarget = "abc"
+	wantErr := errors.New("not found")
+	updated, _ := m.Update(descLoadedMsg{target: "abc", err: wantErr})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal (err recovers)", got.mode)
+	}
+	if got.err != wantErr {
+		t.Errorf("err = %v, want %v", got.err, wantErr)
+	}
+}
+
+// describingLoading 中の Esc でキャンセル → modeNormal、descTarget リセット。
+func TestKeyEscCancelsDescribingLoading(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribingLoading
+	m.descTarget = "abc"
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal", got.mode)
+	}
+	if got.descTarget != "" {
+		t.Errorf("descTarget = %q, want empty (reset on cancel)", got.descTarget)
+	}
+}
