@@ -65,6 +65,8 @@ func (m Model) footerView() string {
 	switch m.mode {
 	case modeConfirmingAbandon:
 		return modalHintStyle.Render("y/Enter: abandon . n/Esc: cancel")
+	case modeDescribingLoading:
+		return modalHintStyle.Render("Esc: cancel")
 	default:
 		return m.help.View(m.keys)
 	}
@@ -92,6 +94,11 @@ func (m Model) modalView() string {
 		body := fmt.Sprintf("Abandon %s?", m.selectedChangeID())
 		hint := "y/Enter: abandon . n/Esc: cancel"
 		return modalBoxStyle.Width(boxW).Render(title + "\n\n" + body + "\n\n" + hint)
+	case modeDescribingLoading:
+		boxW := min(60, m.width-4)
+		body := fmt.Sprintf("loading description for %s...", m.descTarget)
+		hint := "Esc: cancel"
+		return modalBoxStyle.Width(boxW).Render(body + "\n\n" + hint)
 	}
 	return ""
 }

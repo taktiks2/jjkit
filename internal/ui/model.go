@@ -48,6 +48,13 @@ type (
 	logLoadedMsg struct{ log *jjlog.Log }
 	logErrMsg    struct{ err error }
 	opResultMsg  struct{ err error }
+	// descLoadedMsg は describe modal の seed 取得結果。
+	// target は要求時点の change ID。loading 中に @ が動いても stale 判定できる。
+	descLoadedMsg struct {
+		target string
+		desc   string
+		err    error
+	}
 )
 
 // Model は Log ペインの状態。
@@ -68,10 +75,14 @@ type Model struct {
 	diffContent string
 	err         error
 
-	// Issue #3: 書き込み操作 (n/e/d/a) 中のフラグ。
+	// 書き込み操作 (n/e/d/a) 中のフラグ。
 	// 真の間は n/e/d/a を吸う（読み込み系 r/Up/Down/Tab は通す）。
 	opInFlight bool
 	mode       mode
+	// describe modal の対象 change ID。stale 判定に使う。
+	// loading 中に @ が動いても、descLoadedMsg.target と m.selectedChangeID() の照合で
+	// 古い結果を捨てられる。Cancel 時に "" にリセット。
+	descTarget string
 }
 
 // New は初期化済みの Model を返す。
@@ -153,10 +164,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffContent = string(msg.raw)
 		m.refreshDiff()
 		return m, nil
+	case descLoadedMsg:
+		// stale ガード 2 種
+		if m.mode != modeDescribingLoading {
+			return m, nil // 既にキャンセル済み
+		}
+		if msg.target != m.selectedChangeID() {
+			return m, nil // 選択が動いた
+		}
+		if msg.err != nil {
+			m.mode = modeNormal
+			m.descTarget = ""
+			m.err = msg.err
+			return m, nil
+		}
+		m.mode = modeNormal
+		m.descTarget = ""
+		return m, nil
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeConfirmingAbandon:
 			return m.updateConfirmingAbandon(msg)
+		case modeDescribingLoading:
+			return m.updateDescribingLoading(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -237,6 +267,17 @@ func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.mode = modeConfirmingAbandon
 		return m, nil
+	case key.Matches(msg, m.keys.Describe):
+		if m.opInFlight {
+			return m, nil
+		}
+		cmd := m.descCmd()
+		if cmd == nil {
+			return m, nil
+		}
+		m.mode = modeDescribingLoading
+		m.descTarget = m.selectedChangeID()
+		return m, cmd
 	case key.Matches(msg, m.keys.Refresh):
 		return m, loadLog
 	case key.Matches(msg, m.keys.Help):
@@ -446,4 +487,28 @@ func (m Model) jjEditCmd() tea.Cmd {
 	return func() tea.Msg {
 		return opResultMsg{err: jj.Edit(change)}
 	}
+}
+
+// descCmd は選択中の change の description を非同期で取得する Cmd を返す。
+// 結果は descLoadedMsg として Update に届く（target で stale 判定）。
+func (m Model) descCmd() tea.Cmd {
+	change := m.selectedChangeID()
+	if change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		desc, err := jj.Description(change)
+		return descLoadedMsg{target: change, desc: desc, err: err}
+	}
+}
+
+// updateDescribingLoading は describe seed fetch 中のキー処理。
+// Cancel で modeNormal に戻る（取得中もキャンセル可）。それ以外は吸う。
+func (m Model) updateDescribingLoading(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Cancel) {
+		m.mode = modeNormal
+		m.descTarget = ""
+		return m, nil
+	}
+	return m, nil
 }
