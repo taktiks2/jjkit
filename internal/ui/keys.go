@@ -20,6 +20,7 @@ type keyMap struct {
 	Confirm  key.Binding
 	Cancel   key.Binding
 	Describe key.Binding
+	Submit   key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -36,6 +37,7 @@ func newKeyMap() keyMap {
 		Confirm:  key.NewBinding(key.WithKeys("enter", "y"), key.WithHelp("enter/y", "confirm")),
 		Cancel:   key.NewBinding(key.WithKeys("esc", "n"), key.WithHelp("esc/n", "cancel")),
 		Describe: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "describe")),
+		Submit:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
 	}
 }
 

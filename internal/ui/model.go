@@ -5,6 +5,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
@@ -83,16 +84,19 @@ type Model struct {
 	// loading 中に @ が動いても、descLoadedMsg.target と m.selectedChangeID() の照合で
 	// 古い結果を捨てられる。Cancel 時に "" にリセット。
 	descTarget string
+	// describe modal の text-input。SetValue(seed) → ユーザー編集 → Value() で submit。
+	descInput textinput.Model
 }
 
 // New は初期化済みの Model を返す。
 func New() Model {
 	return Model{
-		keys:    newKeyMap(),
-		help:    help.New(),
-		logVP:   viewport.New(),
-		filesVP: viewport.New(),
-		diffVP:  viewport.New(),
+		keys:      newKeyMap(),
+		help:      help.New(),
+		logVP:     viewport.New(),
+		filesVP:   viewport.New(),
+		diffVP:    viewport.New(),
+		descInput: textinput.New(),
 	}
 }
 
@@ -178,15 +182,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
-		m.mode = modeNormal
-		m.descTarget = ""
-		return m, nil
+		// 成功: modeDescribing に遷移、textinput に seed セット、Focus blink Cmd を返す。
+		m.mode = modeDescribing
+		m.descInput.SetValue(msg.desc)
+		m.descInput.CursorEnd()
+		return m, m.descInput.Focus()
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeConfirmingAbandon:
 			return m.updateConfirmingAbandon(msg)
 		case modeDescribingLoading:
 			return m.updateDescribingLoading(msg)
+		case modeDescribing:
+			return m.updateDescribing(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -511,4 +519,44 @@ func (m Model) updateDescribingLoading(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		return m, nil
 	}
 	return m, nil
+}
+
+// updateDescribing は describe modal (textinput 編集中) のキー処理。
+// Submit (Enter) → jj describe 発射、Cancel (Esc) → 戻る、それ以外は textinput に流す。
+// Submit は "enter" 限定なので、textinput への "y" 入力等は Confirm に吸われない。
+func (m Model) updateDescribing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Submit):
+		cmd := m.jjDescribeCmd(m.descInput.Value())
+		m.mode = modeNormal
+		m.descInput.Reset()
+		m.descTarget = ""
+		if cmd == nil {
+			return m, nil
+		}
+		m.opInFlight = true
+		return m, cmd
+	case key.Matches(msg, m.keys.Cancel):
+		m.mode = modeNormal
+		m.descInput.Reset()
+		m.descTarget = ""
+		return m, nil
+	}
+	// それ以外のキーは textinput に流す (j/k/y 等も普通に文字入力になる)。
+	var cmd tea.Cmd
+	m.descInput, cmd = m.descInput.Update(msg)
+	return m, cmd
+}
+
+// jjDescribeCmd は <descTarget> の description を <msg> に置き換える jj describe を
+// 非同期で実行する Cmd を返す。submit 時点で @ が動いていても、describe 対象は当初
+// 押下した change のまま (descTarget) で良い。
+func (m Model) jjDescribeCmd(msg string) tea.Cmd {
+	change := m.descTarget
+	if change == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return opResultMsg{err: jj.Describe(change, msg)}
+	}
 }

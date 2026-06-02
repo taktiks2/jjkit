@@ -67,6 +67,8 @@ func (m Model) footerView() string {
 		return modalHintStyle.Render("y/Enter: abandon . n/Esc: cancel")
 	case modeDescribingLoading:
 		return modalHintStyle.Render("Esc: cancel")
+	case modeDescribing:
+		return modalHintStyle.Render("Enter: save . Esc: cancel")
 	default:
 		return m.help.View(m.keys)
 	}
@@ -99,6 +101,13 @@ func (m Model) modalView() string {
 		body := fmt.Sprintf("loading description for %s...", m.descTarget)
 		hint := "Esc: cancel"
 		return modalBoxStyle.Width(boxW).Render(body + "\n\n" + hint)
+	case modeDescribing:
+		boxW := min(60, m.width-4)
+		title := fmt.Sprintf("Edit description for %s", m.descTarget)
+		hint := "Enter: save . Esc: cancel"
+		return modalBoxStyle.Width(boxW).Render(
+			title + "\n\n" + m.descInput.View() + "\n\n" + hint,
+		)
 	}
 	return ""
 }
