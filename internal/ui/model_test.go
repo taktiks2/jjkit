@@ -497,3 +497,83 @@ func TestKeyEscCancelsDescribingLoading(t *testing.T) {
 		t.Errorf("descTarget = %q, want empty (reset on cancel)", got.descTarget)
 	}
 }
+
+// Issue #3: describing modal — textinput で seed を編集し Enter で確定。
+// Task 7 の暫定挙動 (descLoadedMsg{err: nil} → modeNormal) をここで本来の遷移
+// (modeDescribing + textinput.SetValue + Focus blink) に書き換える。
+
+// descLoadedMsg(成功): modeDescribing に遷移、textinput に seed セット、Cmd は Focus blink。
+func TestDescLoadedTransitionsToDescribingWithSeed(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribingLoading
+	m.descTarget = "abc"
+	updated, cmd := m.Update(descLoadedMsg{target: "abc", desc: "feat: hello"})
+	got := updated.(Model)
+	if got.mode != modeDescribing {
+		t.Errorf("mode = %v, want modeDescribing", got.mode)
+	}
+	if got.descInput.Value() != "feat: hello" {
+		t.Errorf("descInput.Value() = %q, want %q", got.descInput.Value(), "feat: hello")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want non-nil (Focus blink)")
+	}
+}
+
+// describing 中の Enter: jj describe 発射、mode=normal、opInFlight=true、textinput リセット。
+func TestDescribingSubmitFiresDescribeCmd(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribing
+	m.descTarget = "abc"
+	m.descInput.SetValue("new description")
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal", got.mode)
+	}
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want jj describe Cmd")
+	}
+}
+
+// describing 中の Esc: mode=normal、textinput リセット、opInFlight 変化なし。
+func TestDescribingEscCancels(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribing
+	m.descInput.SetValue("draft")
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	got := updated.(Model)
+	if got.mode != modeNormal {
+		t.Errorf("mode = %v, want modeNormal", got.mode)
+	}
+	if got.descInput.Value() != "" {
+		t.Errorf("descInput.Value() = %q, want empty (reset)", got.descInput.Value())
+	}
+}
+
+// describing 中の通常キー (例: 'j') は textinput に流れる → 値に追加される。
+// 'y' を試したいが、'y' は Confirm binding なので Confirm 経由で submit になる。
+// describing では Submit (= Enter のみ) と Cancel (= Esc のみ) を区別する設計が必要。
+// このテストは「'j' のような modeNormal で Down にマップされるキーが、describing 中は
+// textinput に流れる」ことを検証する。
+func TestDescribingNormalKeysGoToInput(t *testing.T) {
+	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	m.mode = modeDescribing
+	m.descInput.Focus()
+	updated, _ := m.Update(keyPress('j'))
+	got := updated.(Model)
+	if got.descInput.Value() != "j" {
+		t.Errorf("descInput.Value() = %q, want %q (j typed into input)", got.descInput.Value(), "j")
+	}
+}
