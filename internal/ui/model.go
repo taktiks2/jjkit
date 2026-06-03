@@ -336,6 +336,10 @@ func (m *Model) applyLayout() {
 	setVP(&m.logVP, l.log)
 	setVP(&m.filesVP, l.files)
 	setVP(&m.diffVP, l.diff)
+
+	// modal box = min(60, m.width-4)、padding(1, 2) で左右合計 4 引いた内寸。
+	boxW := min(60, m.width-4)
+	m.descInput.SetWidth(max(boxW-4, 0))
 }
 
 // setVP は外寸 rect から枠(2)とタイトル行(1)を引いた内寸を viewport に渡す。
