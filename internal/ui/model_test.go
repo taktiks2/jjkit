@@ -577,3 +577,16 @@ func TestDescribingNormalKeysGoToInput(t *testing.T) {
 		t.Errorf("descInput.Value() = %q, want %q (j typed into input)", got.descInput.Value(), "j")
 	}
 }
+
+// Issue #3: WindowSizeMsg を受けたら descInput の Width も追従して更新される。
+// 起動時の幅で固まらず、ターミナルリサイズに反応する。
+// modal box = min(60, m.width-4), padding(1, 2) で左右 4 引いた内寸が input 幅。
+func TestWindowSizeUpdatesDescInputWidth(t *testing.T) {
+	m := New()
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	got := updated.(Model)
+	// boxW = min(60, 100-4) = 60, padding 2*2 = 4, よって input 幅 = 56。
+	if w := got.descInput.Width(); w != 56 {
+		t.Errorf("descInput.Width() = %d, want 56", w)
+	}
+}
