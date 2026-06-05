@@ -19,9 +19,9 @@ func TestApplyLayoutSizesAllViewports(t *testing.T) {
 		gotW, gotH int
 		want       rect
 	}{
-		{"log", m.logVP.Width(), m.logVP.Height(), want.log},
-		{"files", m.filesVP.Width(), m.filesVP.Height(), want.files},
-		{"diff", m.diffVP.Width(), m.diffVP.Height(), want.diff},
+		{"log", m.log.vp.Width(), m.log.vp.Height(), want.log},
+		{"files", m.files.vp.Width(), m.files.vp.Height(), want.files},
+		{"diff", m.diff.vp.Width(), m.diff.vp.Height(), want.diff},
 	}
 	for _, c := range cases {
 		wantW := max(c.want.w-2, 0)

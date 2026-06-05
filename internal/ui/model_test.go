@@ -27,18 +27,18 @@ func twoRowLog() *jjlog.Log {
 func TestLogLoadedPreservesSelection(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
-	m.log = &jjlog.Log{Rows: []jjlog.Row{
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "a", Lines: []string{"a0"}},
 		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
 	}}
-	m.logSel = 0
+	m.log.sel = 0
 	newLog := &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "x", Lines: []string{"x0"}},
 		{ChangeID: "a", Lines: []string{"a0"}},
 		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
 	}}
 	updated, _ := m.Update(logLoadedMsg{log: newLog})
-	if got := updated.(Model).logSel; got != 1 {
+	if got := updated.(Model).log.sel; got != 1 {
 		t.Errorf("logSel = %d, want 1 (a moved to row1)", got)
 	}
 }
@@ -47,16 +47,16 @@ func TestLogLoadedPreservesSelection(t *testing.T) {
 func TestLogLoadedFallsBackToWC(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
-	m.log = &jjlog.Log{Rows: []jjlog.Row{
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "gone", Lines: []string{"x"}},
 	}}
-	m.logSel = 0
+	m.log.sel = 0
 	newLog := &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "a", Lines: []string{"a0"}},
 		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
 	}}
 	updated, _ := m.Update(logLoadedMsg{log: newLog})
-	if got := updated.(Model).logSel; got != 1 {
+	if got := updated.(Model).log.sel; got != 1 {
 		t.Errorf("logSel = %d, want 1 (WC fallback)", got)
 	}
 }
@@ -70,7 +70,7 @@ func TestLogLoadedFirstLoadGoesToWC(t *testing.T) {
 		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
 	}}
 	updated, _ := m.Update(logLoadedMsg{log: newLog})
-	if got := updated.(Model).logSel; got != 1 {
+	if got := updated.(Model).log.sel; got != 1 {
 		t.Errorf("logSel = %d, want 1 (WC on first load)", got)
 	}
 }
@@ -79,48 +79,48 @@ func TestLogLoadedFirstLoadGoesToWC(t *testing.T) {
 func TestSelectionClampsAtBounds(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
-	m.log = twoRowLog()
+	m.log.log = twoRowLog()
 
-	m.logSel = 0
+	m.log.sel = 0
 	up := moveSelection(m, -1)
-	if up.logSel != 0 {
-		t.Errorf("up at top: logSel = %d, want 0", up.logSel)
+	if up.log.sel != 0 {
+		t.Errorf("up at top: logSel = %d, want 0", up.log.sel)
 	}
 
-	m.logSel = 1
+	m.log.sel = 1
 	down := moveSelection(m, +1)
-	if down.logSel != 1 {
-		t.Errorf("down at bottom: logSel = %d, want 1", down.logSel)
+	if down.log.sel != 1 {
+		t.Errorf("down at bottom: logSel = %d, want 1", down.log.sel)
 	}
 }
 
 // ↑/↓ がフォーカスペインのカーソルだけを動かす。
 func TestMoveRoutedByFocus(t *testing.T) {
 	m := New()
-	m.log = twoRowLog()
-	m.files = []jjdiff.FileChange{{Status: "M", Path: "x"}, {Status: "A", Path: "y"}}
-	m.logSel, m.fileSel = 0, 0
+	m.log.log = twoRowLog()
+	m.files.items = []jjdiff.FileChange{{Status: "M", Path: "x"}, {Status: "A", Path: "y"}}
+	m.log.sel, m.files.sel = 0, 0
 
 	m.focus = paneLog
 	m = moveSelection(m, +1)
-	if m.logSel != 1 || m.fileSel != 0 {
-		t.Errorf("Log focus +1: logSel=%d fileSel=%d, want 1,0", m.logSel, m.fileSel)
+	if m.log.sel != 1 || m.files.sel != 0 {
+		t.Errorf("Log focus +1: logSel=%d fileSel=%d, want 1,0", m.log.sel, m.files.sel)
 	}
 
 	m.focus = paneFiles
 	m = moveSelection(m, +1)
-	if m.fileSel != 1 || m.logSel != 1 {
-		t.Errorf("Files focus +1: fileSel=%d logSel=%d, want 1,1", m.fileSel, m.logSel)
+	if m.files.sel != 1 || m.log.sel != 1 {
+		t.Errorf("Files focus +1: fileSel=%d logSel=%d, want 1,1", m.files.sel, m.log.sel)
 	}
 }
 
 // currentDiffReq が (focus, 選択) から「今 Diff に出すべき内容」を正しく導く。
 func TestCurrentDiffReqByFocus(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
-	m.files = []jjdiff.FileChange{{Status: "M", Path: "src/x.go"}}
-	m.fileSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
+	m.files.items = []jjdiff.FileChange{{Status: "M", Path: "src/x.go"}}
+	m.files.sel = 0
 
 	m.focus = paneLog
 	if got := m.currentDiffReq(); got != (diffReq{change: "aaaa"}) {
@@ -136,17 +136,17 @@ func TestCurrentDiffReqByFocus(t *testing.T) {
 // 非同期 diff 結果の stale ガード。
 func TestStaleDiffResultIgnored(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.focus = paneLog
 
 	stale, _ := m.Update(diffLoadedMsg{req: diffReq{change: "bbbb"}, raw: []byte("STALE")})
-	if got := stale.(Model).diffContent; got != "" {
+	if got := stale.(Model).diff.content; got != "" {
 		t.Errorf("stale result applied: %q", got)
 	}
 
 	fresh, _ := m.Update(diffLoadedMsg{req: diffReq{change: "aaaa"}, raw: []byte("FRESH")})
-	if got := fresh.(Model).diffContent; got != "FRESH" {
+	if got := fresh.(Model).diff.content; got != "FRESH" {
 		t.Errorf("matching result not applied: %q", got)
 	}
 }
@@ -154,23 +154,23 @@ func TestStaleDiffResultIgnored(t *testing.T) {
 // filesLoadedMsg: change 一致なら files を入れて fileSel リセット。
 func TestFilesLoadedSetsFilesAndResetsSelection(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
-	m.logSel = 0
-	m.fileSel = 3
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
+	m.log.sel = 0
+	m.files.sel = 3
 
 	files := []jjdiff.FileChange{{Status: "M", Path: "a"}, {Status: "A", Path: "b"}}
 	updated, _ := m.Update(filesLoadedMsg{change: "aaaa", files: files})
 	got := updated.(Model)
-	if len(got.files) != 2 {
-		t.Fatalf("files len = %d, want 2", len(got.files))
+	if len(got.files.items) != 2 {
+		t.Fatalf("files len = %d, want 2", len(got.files.items))
 	}
-	if got.fileSel != 0 {
-		t.Errorf("fileSel = %d, want 0 (reset)", got.fileSel)
+	if got.files.sel != 0 {
+		t.Errorf("fileSel = %d, want 0 (reset)", got.files.sel)
 	}
 
 	stale, _ := m.Update(filesLoadedMsg{change: "zzzz", files: files})
-	if len(stale.(Model).files) != 0 {
-		t.Errorf("stale files applied: %v", stale.(Model).files)
+	if len(stale.(Model).files.items) != 0 {
+		t.Errorf("stale files applied: %v", stale.(Model).files.items)
 	}
 }
 
@@ -197,7 +197,7 @@ func TestTabCyclesFocus(t *testing.T) {
 // 成功時: opInFlight false、refresh Cmd 非 nil。
 func TestOpResultSuccessClearsFlightAndReturnsRefreshCmd(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "a", Lines: []string{"x"}}}}
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "a", Lines: []string{"x"}}}}
 	m.opInFlight = true
 	updated, cmd := m.Update(opResultMsg{err: nil})
 	got := updated.(Model)
@@ -238,8 +238,8 @@ func keyPress(r rune) tea.KeyPressMsg {
 // 'n' 押下: opInFlight=true、Cmd 非 nil。
 func TestKeyNewFiresOpAndSetsFlight(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	updated, cmd := m.Update(keyPress('n'))
 	got := updated.(Model)
 	if !got.opInFlight {
@@ -253,8 +253,8 @@ func TestKeyNewFiresOpAndSetsFlight(t *testing.T) {
 // opInFlight 中の 'n' は無視。
 func TestKeyNewIgnoredWhenOpInFlight(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.opInFlight = true
 	updated, cmd := m.Update(keyPress('n'))
 	if cmd != nil {
@@ -280,8 +280,8 @@ func TestKeyNewIgnoredWhenNoSelection(t *testing.T) {
 // 'e' 押下: opInFlight=true、Cmd 非 nil。
 func TestKeyEditFiresOpAndSetsFlight(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	updated, cmd := m.Update(keyPress('e'))
 	got := updated.(Model)
 	if !got.opInFlight {
@@ -295,8 +295,8 @@ func TestKeyEditFiresOpAndSetsFlight(t *testing.T) {
 // opInFlight 中の 'e' は無視。
 func TestKeyEditIgnoredWhenOpInFlight(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.opInFlight = true
 	updated, cmd := m.Update(keyPress('e'))
 	if cmd != nil {
@@ -314,8 +314,8 @@ func TestKeyEditIgnoredWhenOpInFlight(t *testing.T) {
 // 'a' 押下: modal=abandonModal{target}、Cmd は nil（まだ何も発射しない）。
 func TestKeyAbandonEntersConfirming(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	updated, cmd := m.Update(keyPress('a'))
 	got := updated.(Model)
 	am, ok := got.modal.(abandonModal)
@@ -333,8 +333,8 @@ func TestKeyAbandonEntersConfirming(t *testing.T) {
 // abandon modal 中の Enter: jj abandon 発射、modal 閉じる、opInFlight=true。
 func TestConfirmYesFiresAbandonCmd(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.modal = abandonModal{target: "abc"}
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got := updated.(Model)
@@ -352,8 +352,8 @@ func TestConfirmYesFiresAbandonCmd(t *testing.T) {
 // abandon modal 中の Esc: modal 閉じる、opInFlight 変化なし、Cmd nil。
 func TestConfirmNoReturnsToNormal(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.modal = abandonModal{target: "abc"}
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got := updated.(Model)
@@ -371,14 +371,14 @@ func TestConfirmNoReturnsToNormal(t *testing.T) {
 // abandon modal 中の j (Down): logSel は動かさない。modal がナビキーを吸う。
 func TestNormalKeysIgnoredInConfirmingMode(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "a", Lines: []string{"x"}},
 		{ChangeID: "b", IsWC: true, Lines: []string{"y"}},
 	}}
-	m.logSel = 0
+	m.log.sel = 0
 	m.modal = abandonModal{target: "a"}
 	updated, _ := m.Update(keyPress('j'))
-	if got := updated.(Model).logSel; got != 0 {
+	if got := updated.(Model).log.sel; got != 0 {
 		t.Errorf("logSel = %d, want 0 (j ignored in confirming mode)", got)
 	}
 }
@@ -400,8 +400,8 @@ func TestFooterShowsConfirmHint(t *testing.T) {
 // 'd' 押下: modal=describeModal{target, loading: true}、Cmd 非 nil (descSeedCmd)。
 func TestKeyDescribeEntersLoadingAndFiresDescCmd(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	updated, cmd := m.Update(keyPress('d'))
 	got := updated.(Model)
 	dm, ok := got.modal.(describeModal)
@@ -422,8 +422,8 @@ func TestKeyDescribeEntersLoadingAndFiresDescCmd(t *testing.T) {
 // descLoadedMsg: target が現在の selectedChangeID と違えば stale で捨てる。
 func TestDescLoadedStaleByTargetIgnored(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.modal = newDescribeModal("abc", 80)
 	updated, _ := m.Update(descLoadedMsg{target: "stale", desc: "old", err: nil})
 	got := updated.(Model)
@@ -439,8 +439,8 @@ func TestDescLoadedStaleByTargetIgnored(t *testing.T) {
 // describe modal が無い (loading 中に Esc 済み) なら descLoadedMsg は捨てる。
 func TestDescLoadedStaleByModeIgnored(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	// modal == nil（既にキャンセル済み）
 	updated, _ := m.Update(descLoadedMsg{target: "abc", desc: "x", err: nil})
 	got := updated.(Model)
@@ -452,8 +452,8 @@ func TestDescLoadedStaleByModeIgnored(t *testing.T) {
 // descLoadedMsg(err): modal 閉じる + err セット。
 func TestDescLoadedErrorReturnsToNormal(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.modal = newDescribeModal("abc", 80)
 	wantErr := errors.New("not found")
 	updated, _ := m.Update(descLoadedMsg{target: "abc", err: wantErr})
@@ -469,8 +469,8 @@ func TestDescLoadedErrorReturnsToNormal(t *testing.T) {
 // describing loading 中の Esc: modal 閉じる。
 func TestKeyEscCancelsDescribingLoading(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.modal = newDescribeModal("abc", 80)
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got := updated.(Model)
@@ -482,8 +482,8 @@ func TestKeyEscCancelsDescribingLoading(t *testing.T) {
 // descLoadedMsg(成功): loading=false へ遷移、input に seed セット、Cmd は Focus blink。
 func TestDescLoadedTransitionsToDescribingWithSeed(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	m.modal = newDescribeModal("abc", 80)
 	updated, cmd := m.Update(descLoadedMsg{target: "abc", desc: "feat: hello"})
 	got := updated.(Model)
@@ -505,8 +505,8 @@ func TestDescLoadedTransitionsToDescribingWithSeed(t *testing.T) {
 // describing 中の Enter: jj describe 発射、modal 閉じる、opInFlight=true。
 func TestDescribingSubmitFiresDescribeCmd(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	input := textinput.New()
 	input.SetValue("new description")
 	m.modal = describeModal{target: "abc", loading: false, input: input}
@@ -526,8 +526,8 @@ func TestDescribingSubmitFiresDescribeCmd(t *testing.T) {
 // describing 中の Esc: modal 閉じる、opInFlight 変化なし。
 func TestDescribingEscCancels(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	input := textinput.New()
 	input.SetValue("draft")
 	m.modal = describeModal{target: "abc", loading: false, input: input}
@@ -544,8 +544,8 @@ func TestDescribingEscCancels(t *testing.T) {
 // describing 中の 'j' は textinput に流れる → 値に追加される。
 func TestDescribingNormalKeysGoToInput(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	input := textinput.New()
 	input.Focus()
 	m.modal = describeModal{target: "abc", loading: false, input: input}
@@ -564,8 +564,8 @@ func TestDescribingNormalKeysGoToInput(t *testing.T) {
 // modal box = min(60, m.width-4)、padding(1, 2) で左右 4 引いた内寸が input 幅。
 func TestDescribeModalSizesInputFromCurrentWidth(t *testing.T) {
 	m := New()
-	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
-	m.logSel = 0
+	m.log.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.log.sel = 0
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = updated.(Model)
 	updated, _ = m.Update(keyPress('d'))
