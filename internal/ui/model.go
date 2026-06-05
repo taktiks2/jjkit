@@ -5,7 +5,6 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
@@ -22,15 +21,6 @@ const (
 	paneDiff
 	paneBookmarks
 	paneOplog
-)
-
-type mode int
-
-const (
-	modeNormal            mode = iota
-	modeDescribingLoading      // describe seed fetch 中
-	modeDescribing             // textinput 編集中
-	modeConfirmingAbandon      // abandon 確認待ち
 )
 
 var focusCycle = []pane{paneLog, paneFiles, paneBookmarks}
@@ -58,7 +48,7 @@ type (
 	}
 )
 
-// Model は Log ペインの状態。
+// Model は jjkit TUI の状態。modal == nil が「modal 無し（通常モード）」。
 type Model struct {
 	focus       pane
 	keys        keyMap
@@ -76,27 +66,21 @@ type Model struct {
 	diffContent string
 	err         error
 
-	// 書き込み操作 (n/e/d/a) 中のフラグ。
+	// opInFlight は jj 書き込み操作 (n/e/d/a) を発射してから opResultMsg を受けるまで真。
 	// 真の間は n/e/d/a を吸う（読み込み系 r/Up/Down/Tab は通す）。
 	opInFlight bool
-	mode       mode
-	// describe modal の対象 change ID。stale 判定に使う。
-	// loading 中に @ が動いても、descLoadedMsg.target と m.selectedChangeID() の照合で
-	// 古い結果を捨てられる。Cancel 時に "" にリセット。
-	descTarget string
-	// describe modal の text-input。SetValue(seed) → ユーザー編集 → Value() で submit。
-	descInput textinput.Model
+	// modal == nil なら通常モード。非 nil なら overlay の対話中（abandon / describe）。
+	modal Modal
 }
 
 // New は初期化済みの Model を返す。
 func New() Model {
 	return Model{
-		keys:      newKeyMap(),
-		help:      help.New(),
-		logVP:     viewport.New(),
-		filesVP:   viewport.New(),
-		diffVP:    viewport.New(),
-		descInput: textinput.New(),
+		keys:    newKeyMap(),
+		help:    help.New(),
+		logVP:   viewport.New(),
+		filesVP: viewport.New(),
+		diffVP:  viewport.New(),
 	}
 }
 
@@ -119,12 +103,16 @@ func loadLog() tea.Msg {
 }
 
 // Update はメッセージを受けて状態を更新する（Bubble Tea の中心）。
+// modal active 時はキー押下を modal に委譲し、async msg のうち未知のものも modal へ流す。
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
 		m.applyLayout()
+		if m.modal != nil {
+			m.modal = m.modal.Resize(m.width)
+		}
 		m.ready = true
 		m.refreshLog()
 		m.refreshFiles()
@@ -168,71 +156,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffContent = string(msg.raw)
 		m.refreshDiff()
 		return m, nil
-	case descLoadedMsg:
-		// stale ガード 2 種
-		if m.mode != modeDescribingLoading {
-			return m, nil // 既にキャンセル済み
-		}
-		if msg.target != m.selectedChangeID() {
-			return m, nil // 選択が動いた
-		}
-		if msg.err != nil {
-			m.mode = modeNormal
-			m.descTarget = ""
-			m.err = msg.err
-			return m, nil
-		}
-		// 成功: modeDescribing に遷移、textinput に seed セット、Focus blink Cmd を返す。
-		m.mode = modeDescribing
-		m.descInput.SetValue(msg.desc)
-		m.descInput.CursorEnd()
-		return m, m.descInput.Focus()
 	case tea.KeyPressMsg:
-		switch m.mode {
-		case modeConfirmingAbandon:
-			return m.updateConfirmingAbandon(msg)
-		case modeDescribingLoading:
-			return m.updateDescribingLoading(msg)
-		case modeDescribing:
-			return m.updateDescribing(msg)
-		default:
-			return m.updateNormal(msg)
+		if m.modal != nil {
+			next, cmd := m.modal.HandleKey(msg, m.keys)
+			// next==nil かつ cmd!=nil は「dismiss しつつ jj op を発射」を意味する。
+			fired := next == nil && cmd != nil
+			m.modal = next
+			if fired {
+				m.opInFlight = true
+			}
+			return m, cmd
 		}
-	}
-	return m, nil
-}
-
-// jjAbandonCmd は選択中の change を破棄する jj abandon を非同期で実行する Cmd を返す。
-func (m Model) jjAbandonCmd() tea.Cmd {
-	change := m.selectedChangeID()
-	if change == "" {
-		return nil
-	}
-	return func() tea.Msg {
-		return opResultMsg{err: jj.Abandon(change)}
-	}
-}
-
-// updateConfirmingAbandon は abandon 確認 modal 中のキー処理。
-// Confirm → jj abandon 発射、Cancel → 戻る、それ以外は吸う。
-func (m Model) updateConfirmingAbandon(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Confirm):
-		cmd := m.jjAbandonCmd()
-		m.mode = modeNormal
-		if cmd == nil {
+		return m.updateNormal(msg)
+	default:
+		// modal 宛の非同期 msg（descLoadedMsg など）を委譲する。
+		// modal が nil ならどこの宛先でもないので捨てる。
+		if m.modal == nil {
 			return m, nil
 		}
-		m.opInFlight = true
+		next, cmd, err := m.modal.HandleMsg(msg, m.selectedChangeID())
+		m.modal = next
+		if err != nil {
+			m.err = err
+		}
 		return m, cmd
-	case key.Matches(msg, m.keys.Cancel):
-		m.mode = modeNormal
-		return m, nil
 	}
-	return m, nil // それ以外 (j/k 等)は吸う
 }
 
-// updateNormal は通常モードのキー処理。既存の KeyPressMsg 処理を切り出したもの。
+// updateNormal は通常モード（modal 無し）のキー処理。
 func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Quit):
@@ -270,22 +221,22 @@ func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.opInFlight {
 			return m, nil
 		}
-		if m.selectedChangeID() == "" {
+		target := m.selectedChangeID()
+		if target == "" {
 			return m, nil
 		}
-		m.mode = modeConfirmingAbandon
+		m.modal = abandonModal{target: target}
 		return m, nil
 	case key.Matches(msg, m.keys.Describe):
 		if m.opInFlight {
 			return m, nil
 		}
-		cmd := m.descCmd()
-		if cmd == nil {
+		target := m.selectedChangeID()
+		if target == "" {
 			return m, nil
 		}
-		m.mode = modeDescribingLoading
-		m.descTarget = m.selectedChangeID()
-		return m, cmd
+		m.modal = newDescribeModal(target, m.width)
+		return m, descSeedCmd(target)
 	case key.Matches(msg, m.keys.Refresh):
 		return m, loadLog
 	case key.Matches(msg, m.keys.Help):
@@ -330,16 +281,13 @@ func moveFileSel(m Model, delta int) Model {
 }
 
 // applyLayout は computeLayout の外寸から、各 viewport の内寸（枠2 + タイトル1 を除く）を渡す。
+// modal の内寸は modal 自身が Resize() で握っている。
 func (m *Model) applyLayout() {
 	footerH := lipglossHeight(m.footerView())
 	l := computeLayout(m.width, m.height, footerH)
 	setVP(&m.logVP, l.log)
 	setVP(&m.filesVP, l.files)
 	setVP(&m.diffVP, l.diff)
-
-	// modal box = min(60, m.width-4)、padding(1, 2) で左右合計 4 引いた内寸。
-	boxW := min(60, m.width-4)
-	m.descInput.SetWidth(max(boxW-4, 0))
 }
 
 // setVP は外寸 rect から枠(2)とタイトル行(1)を引いた内寸を viewport に渡す。
@@ -421,7 +369,6 @@ type filesLoadedMsg struct {
 }
 
 // diffCmd は今表示すべき diff（currentDiffReq）を非同期に取りに行く Cmd を返す。
-// 別 goroutine で走り、結果は diffLoadedMsg として Update に届く（stale 判定はそこ）。
 func (m Model) diffCmd() tea.Cmd {
 	req := m.currentDiffReq()
 	if req.change == "" {
@@ -460,7 +407,6 @@ func (m Model) filesCmd() tea.Cmd {
 }
 
 // loadForChange は change が変わったとき（ファイル一覧 + change 全体 diff の両方）に使う。
-// tea.Batch は複数の Cmd を並列に走らせる。
 func (m Model) loadForChange() tea.Cmd {
 	return tea.Batch(m.filesCmd(), m.diffCmd())
 }
@@ -479,7 +425,6 @@ func (m Model) loadAfterMove() tea.Cmd {
 }
 
 // jjNewCmd は選択中の change に対する jj new を非同期で実行する Cmd を返す。
-// 結果は opResultMsg として Update に届く。
 func (m Model) jjNewCmd() tea.Cmd {
 	change := m.selectedChangeID()
 	if change == "" {
@@ -498,69 +443,5 @@ func (m Model) jjEditCmd() tea.Cmd {
 	}
 	return func() tea.Msg {
 		return opResultMsg{err: jj.Edit(change)}
-	}
-}
-
-// descCmd は選択中の change の description を非同期で取得する Cmd を返す。
-// 結果は descLoadedMsg として Update に届く（target で stale 判定）。
-func (m Model) descCmd() tea.Cmd {
-	change := m.selectedChangeID()
-	if change == "" {
-		return nil
-	}
-	return func() tea.Msg {
-		desc, err := jj.Description(change)
-		return descLoadedMsg{target: change, desc: desc, err: err}
-	}
-}
-
-// updateDescribingLoading は describe seed fetch 中のキー処理。
-// Cancel で modeNormal に戻る（取得中もキャンセル可）。それ以外は吸う。
-func (m Model) updateDescribingLoading(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, m.keys.Cancel) {
-		m.mode = modeNormal
-		m.descTarget = ""
-		return m, nil
-	}
-	return m, nil
-}
-
-// updateDescribing は describe modal (textinput 編集中) のキー処理。
-// Submit (Enter) → jj describe 発射、Cancel (Esc) → 戻る、それ以外は textinput に流す。
-// Submit は "enter" 限定なので、textinput への "y" 入力等は Confirm に吸われない。
-func (m Model) updateDescribing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Submit):
-		cmd := m.jjDescribeCmd(m.descInput.Value())
-		m.mode = modeNormal
-		m.descInput.Reset()
-		m.descTarget = ""
-		if cmd == nil {
-			return m, nil
-		}
-		m.opInFlight = true
-		return m, cmd
-	case key.Matches(msg, m.keys.Cancel):
-		m.mode = modeNormal
-		m.descInput.Reset()
-		m.descTarget = ""
-		return m, nil
-	}
-	// それ以外のキーは textinput に流す (j/k/y 等も普通に文字入力になる)。
-	var cmd tea.Cmd
-	m.descInput, cmd = m.descInput.Update(msg)
-	return m, cmd
-}
-
-// jjDescribeCmd は <descTarget> の description を <msg> に置き換える jj describe を
-// 非同期で実行する Cmd を返す。submit 時点で @ が動いていても、describe 対象は当初
-// 押下した change のまま (descTarget) で良い。
-func (m Model) jjDescribeCmd(msg string) tea.Cmd {
-	change := m.descTarget
-	if change == "" {
-		return nil
-	}
-	return func() tea.Msg {
-		return opResultMsg{err: jj.Describe(change, msg)}
 	}
 }

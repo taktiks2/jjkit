@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/taktiks2/jjkit/internal/jjdiff"
@@ -23,17 +24,14 @@ func twoRowLog() *jjlog.Log {
 // これにより describe 後や r キーで「場所を失わない」UX になる。
 
 // 前選択の change ID が new log にもあれば、その row に居続ける。
-// 例: describe 後の refresh で同じ change を編集していたら、そこに留まる。
 func TestLogLoadedPreservesSelection(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
-	// 前の log: row0=a, row1=b(@). 選択は row0=a。
 	m.log = &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "a", Lines: []string{"a0"}},
 		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
 	}}
 	m.logSel = 0
-	// new log: row0=x, row1=a, row2=b(@). a は row1 に移動。
 	newLog := &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "x", Lines: []string{"x0"}},
 		{ChangeID: "a", Lines: []string{"a0"}},
@@ -45,7 +43,7 @@ func TestLogLoadedPreservesSelection(t *testing.T) {
 	}
 }
 
-// 前選択の change ID が new log に無ければ WC row に fallback（abandon の典型ケース）。
+// 前選択の change ID が new log に無ければ WC row に fallback。
 func TestLogLoadedFallsBackToWC(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
@@ -67,7 +65,6 @@ func TestLogLoadedFallsBackToWC(t *testing.T) {
 func TestLogLoadedFirstLoadGoesToWC(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
-	// m.log は nil (初期状態)
 	newLog := &jjlog.Log{Rows: []jjlog.Row{
 		{ChangeID: "a", Lines: []string{"a0"}},
 		{ChangeID: "b", IsWC: true, Lines: []string{"b0"}},
@@ -78,7 +75,7 @@ func TestLogLoadedFirstLoadGoesToWC(t *testing.T) {
 	}
 }
 
-// 選択移動が上端・下端でクランプされること（範囲外へ出ない）を保証する。
+// 選択移動が上端・下端でクランプされること。
 func TestSelectionClampsAtBounds(t *testing.T) {
 	m := New()
 	m.width, m.height, m.ready = 80, 24, true
@@ -97,11 +94,10 @@ func TestSelectionClampsAtBounds(t *testing.T) {
 	}
 }
 
-// ↑/↓ が今フォーカスしているペインのカーソルだけを動かすこと（focus=Log なら logSel、
-// focus=Files なら fileSel）。これが2階層選択の核。
+// ↑/↓ がフォーカスペインのカーソルだけを動かす。
 func TestMoveRoutedByFocus(t *testing.T) {
 	m := New()
-	m.log = twoRowLog() // 2 rows
+	m.log = twoRowLog()
 	m.files = []jjdiff.FileChange{{Status: "M", Path: "x"}, {Status: "A", Path: "y"}}
 	m.logSel, m.fileSel = 0, 0
 
@@ -118,8 +114,7 @@ func TestMoveRoutedByFocus(t *testing.T) {
 	}
 }
 
-// currentDiffReq が (focus, 選択) から「今 Diff に出すべき内容」を正しく導くこと。
-// Log focus なら change 全体（file=""）、Files focus なら選択ファイル単位。
+// currentDiffReq が (focus, 選択) から「今 Diff に出すべき内容」を正しく導く。
 func TestCurrentDiffReqByFocus(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", IsWC: true, Lines: []string{"x"}}}}
@@ -138,36 +133,30 @@ func TestCurrentDiffReqByFocus(t *testing.T) {
 	}
 }
 
-// 非同期ロード結果の stale ガード：移動後に届いた古い diff（req が今の選択と一致しない）は
-// 捨て、現在の選択と一致するものだけ反映すること。Cmd の発火順とは独立にこのロジックが
-// 正しいことを保証する（高速移動・順序逆転シナリオの核）。
+// 非同期 diff 結果の stale ガード。
 func TestStaleDiffResultIgnored(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.focus = paneLog // currentDiffReq == {change: "aaaa"}
+	m.focus = paneLog
 
-	// 別 change 宛の結果は無視される。
 	stale, _ := m.Update(diffLoadedMsg{req: diffReq{change: "bbbb"}, raw: []byte("STALE")})
 	if got := stale.(Model).diffContent; got != "" {
 		t.Errorf("stale result applied: %q", got)
 	}
 
-	// 現在の選択と一致する結果は反映される。
 	fresh, _ := m.Update(diffLoadedMsg{req: diffReq{change: "aaaa"}, raw: []byte("FRESH")})
 	if got := fresh.(Model).diffContent; got != "FRESH" {
 		t.Errorf("matching result not applied: %q", got)
 	}
 }
 
-// filesLoadedMsg: 選択中の change と一致する結果なら files を入れ、fileSel を 0 にリセット。
-// 別 change 宛の古い結果は無視（こちらも stale ガード）。change が変わったら前の fileSel が
-// 範囲外になる可能性があるので、リセットは正当性のために必要。
+// filesLoadedMsg: change 一致なら files を入れて fileSel リセット。
 func TestFilesLoadedSetsFilesAndResetsSelection(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "aaaa", Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.fileSel = 3 // 前の change で動かしていた古い位置
+	m.fileSel = 3
 
 	files := []jjdiff.FileChange{{Status: "M", Path: "a"}, {Status: "A", Path: "b"}}
 	updated, _ := m.Update(filesLoadedMsg{change: "aaaa", files: files})
@@ -179,14 +168,13 @@ func TestFilesLoadedSetsFilesAndResetsSelection(t *testing.T) {
 		t.Errorf("fileSel = %d, want 0 (reset)", got.fileSel)
 	}
 
-	// 別 change 宛は無視される。
 	stale, _ := m.Update(filesLoadedMsg{change: "zzzz", files: files})
 	if len(stale.(Model).files) != 0 {
 		t.Errorf("stale files applied: %v", stale.(Model).files)
 	}
 }
 
-// Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回し、Diff/Oplog を飛ばすこと。
+// Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回。
 func TestTabCyclesFocus(t *testing.T) {
 	m := New()
 	if m.focus != paneLog {
@@ -206,11 +194,7 @@ func TestTabCyclesFocus(t *testing.T) {
 	}
 }
 
-// Issue #3: opResultMsg は new/edit/describe/abandon の jj 実行結果。
-// 成功と失敗を 1 型に統合することで opInFlight の解除漏れを構造的に防ぐ。
-
-// 成功時: opInFlight を false に戻し、refresh Cmd（loadLog + filesCmd + diffCmd の batch）を返す。
-// Cmd の中身は検査せず「非 nil」までを保証する（bubbles の Cmd は不透明な関数）。
+// 成功時: opInFlight false、refresh Cmd 非 nil。
 func TestOpResultSuccessClearsFlightAndReturnsRefreshCmd(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "a", Lines: []string{"x"}}}}
@@ -228,7 +212,7 @@ func TestOpResultSuccessClearsFlightAndReturnsRefreshCmd(t *testing.T) {
 	}
 }
 
-// 失敗時: opInFlight を false に戻し、err を立て、refresh は走らせない。
+// 失敗時: opInFlight false、err セット、refresh は走らせない。
 func TestOpResultErrorClearsFlightAndSetsErr(t *testing.T) {
 	m := New()
 	m.opInFlight = true
@@ -247,15 +231,11 @@ func TestOpResultErrorClearsFlightAndSetsErr(t *testing.T) {
 }
 
 // keyPress はテスト用に printable rune の tea.KeyPressMsg を組み立てる。
-// Code に加えて Text を入れるのが慣用 (key.Matches は KeyPressMsg.String() を見るが、
-// String() は Text が非空ならそれを返すため)。
 func keyPress(r rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }
 
-// Issue #3: 'n' (new) キー — 選択 change に対する jj new を非同期発射、opInFlight ガード付き。
-
-// 'n' 押下: opInFlight=true、Cmd 非 nil を返す。
+// 'n' 押下: opInFlight=true、Cmd 非 nil。
 func TestKeyNewFiresOpAndSetsFlight(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
@@ -270,7 +250,7 @@ func TestKeyNewFiresOpAndSetsFlight(t *testing.T) {
 	}
 }
 
-// opInFlight 中の 'n' は無視 (Cmd nil、フラグ変化なし)。
+// opInFlight 中の 'n' は無視。
 func TestKeyNewIgnoredWhenOpInFlight(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
@@ -285,10 +265,9 @@ func TestKeyNewIgnoredWhenOpInFlight(t *testing.T) {
 	}
 }
 
-// 選択 change が無い（空 log）場合の 'n' は no-op。
+// 選択 change 無しの 'n' は no-op。
 func TestKeyNewIgnoredWhenNoSelection(t *testing.T) {
 	m := New()
-	// m.log は nil
 	updated, cmd := m.Update(keyPress('n'))
 	if cmd != nil {
 		t.Errorf("cmd = %v, want nil (no selection)", cmd)
@@ -298,9 +277,7 @@ func TestKeyNewIgnoredWhenNoSelection(t *testing.T) {
 	}
 }
 
-// Issue #3: 'e' (edit) キー — 選択 change に @ を移す。Task 4 と同形パターン。
-
-// 'e' 押下: opInFlight=true、Cmd 非 nil を返す。
+// 'e' 押下: opInFlight=true、Cmd 非 nil。
 func TestKeyEditFiresOpAndSetsFlight(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
@@ -330,34 +307,39 @@ func TestKeyEditIgnoredWhenOpInFlight(t *testing.T) {
 	}
 }
 
-// Issue #3: 'a' (abandon) + 確認 modal — mode enum を初導入。
-// 破壊的操作なので confirm dialog で挟んでから jj abandon を発射する。
+// ---------------------------------------------------------------------------
+// Modal seam: abandon flow
+// ---------------------------------------------------------------------------
 
-// 'a' 押下: mode=confirmingAbandon、Cmd は nil (まだ何も発射しない)。
+// 'a' 押下: modal=abandonModal{target}、Cmd は nil（まだ何も発射しない）。
 func TestKeyAbandonEntersConfirming(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
 	updated, cmd := m.Update(keyPress('a'))
 	got := updated.(Model)
-	if got.mode != modeConfirmingAbandon {
-		t.Errorf("mode = %v, want modeConfirmingAbandon", got.mode)
+	am, ok := got.modal.(abandonModal)
+	if !ok {
+		t.Fatalf("modal = %T, want abandonModal", got.modal)
+	}
+	if am.target != "abc" {
+		t.Errorf("modal.target = %q, want %q", am.target, "abc")
 	}
 	if cmd != nil {
 		t.Errorf("cmd = %v, want nil (no op yet, just modal)", cmd)
 	}
 }
 
-// confirmingAbandon 中の Enter: jjAbandonCmd 発射、mode=normal に戻る、opInFlight=true。
+// abandon modal 中の Enter: jj abandon 発射、modal 閉じる、opInFlight=true。
 func TestConfirmYesFiresAbandonCmd(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeConfirmingAbandon
+	m.modal = abandonModal{target: "abc"}
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal (back to normal after confirm)", got.mode)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (back to normal after confirm)", got.modal)
 	}
 	if !got.opInFlight {
 		t.Errorf("opInFlight = false, want true (op fired)")
@@ -367,16 +349,16 @@ func TestConfirmYesFiresAbandonCmd(t *testing.T) {
 	}
 }
 
-// confirmingAbandon 中の Esc: mode=normal、opInFlight 変化なし、Cmd nil。
+// abandon modal 中の Esc: modal 閉じる、opInFlight 変化なし、Cmd nil。
 func TestConfirmNoReturnsToNormal(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeConfirmingAbandon
+	m.modal = abandonModal{target: "abc"}
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal (Esc cancels)", got.mode)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (Esc cancels)", got.modal)
 	}
 	if got.opInFlight {
 		t.Errorf("opInFlight = true, want false (cancel doesn't trigger op)")
@@ -386,7 +368,7 @@ func TestConfirmNoReturnsToNormal(t *testing.T) {
 	}
 }
 
-// confirmingAbandon 中の j (= Down): logSel は動かさない。modal 中はナビゲーションを吸う。
+// abandon modal 中の j (Down): logSel は動かさない。modal がナビキーを吸う。
 func TestNormalKeysIgnoredInConfirmingMode(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{
@@ -394,44 +376,46 @@ func TestNormalKeysIgnoredInConfirmingMode(t *testing.T) {
 		{ChangeID: "b", IsWC: true, Lines: []string{"y"}},
 	}}
 	m.logSel = 0
-	m.mode = modeConfirmingAbandon
+	m.modal = abandonModal{target: "a"}
 	updated, _ := m.Update(keyPress('j'))
 	if got := updated.(Model).logSel; got != 0 {
 		t.Errorf("logSel = %d, want 0 (j ignored in confirming mode)", got)
 	}
 }
 
-// confirmingAbandon 中の footer はヒントを出す。
+// abandon modal 中の footer はヒントを出す。
 func TestFooterShowsConfirmHint(t *testing.T) {
 	m := New()
-	m.mode = modeConfirmingAbandon
+	m.modal = abandonModal{target: "abc"}
 	got := m.footerView()
 	if !strings.Contains(got, "abandon") {
 		t.Errorf("footer = %q, want to contain 'abandon'", got)
 	}
 }
 
-// Issue #3: 'd' (describe) — seed fetch フェーズ。
-// 'd' 押下時に describing modal を直接出すのではなく、
-// まず jj log -T description で現在の description を非同期取得 (loading modal)。
-// 取得結果が届いたら次の Task 8 で textinput に切り替える。
-// stale ガード 2 種: target が動いた / mode が既に変わった。
+// ---------------------------------------------------------------------------
+// Modal seam: describe flow
+// ---------------------------------------------------------------------------
 
-// 'd' 押下: mode=describingLoading、descTarget セット、Cmd 非 nil。
+// 'd' 押下: modal=describeModal{target, loading: true}、Cmd 非 nil (descSeedCmd)。
 func TestKeyDescribeEntersLoadingAndFiresDescCmd(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
 	updated, cmd := m.Update(keyPress('d'))
 	got := updated.(Model)
-	if got.mode != modeDescribingLoading {
-		t.Errorf("mode = %v, want modeDescribingLoading", got.mode)
+	dm, ok := got.modal.(describeModal)
+	if !ok {
+		t.Fatalf("modal = %T, want describeModal", got.modal)
 	}
-	if got.descTarget != "abc" {
-		t.Errorf("descTarget = %q, want %q", got.descTarget, "abc")
+	if !dm.loading {
+		t.Errorf("loading = false, want true (just entered)")
+	}
+	if dm.target != "abc" {
+		t.Errorf("target = %q, want %q", dm.target, "abc")
 	}
 	if cmd == nil {
-		t.Errorf("cmd = nil, want descCmd")
+		t.Errorf("cmd = nil, want descSeedCmd")
 	}
 }
 
@@ -440,100 +424,96 @@ func TestDescLoadedStaleByTargetIgnored(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribingLoading
-	m.descTarget = "abc"
+	m.modal = newDescribeModal("abc", 80)
 	updated, _ := m.Update(descLoadedMsg{target: "stale", desc: "old", err: nil})
 	got := updated.(Model)
-	if got.mode != modeDescribingLoading {
-		t.Errorf("mode = %v, want modeDescribingLoading (stale ignored)", got.mode)
+	dm, ok := got.modal.(describeModal)
+	if !ok {
+		t.Fatalf("modal = %T, want describeModal (stale ignored)", got.modal)
+	}
+	if !dm.loading {
+		t.Errorf("loading = false, want true (stale should not advance state)")
 	}
 }
 
-// descLoadedMsg: 既に modeNormal (loading 中に Esc) なら捨てる。
+// describe modal が無い (loading 中に Esc 済み) なら descLoadedMsg は捨てる。
 func TestDescLoadedStaleByModeIgnored(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeNormal // 既にキャンセル済み
-	m.descTarget = "abc"
+	// modal == nil（既にキャンセル済み）
 	updated, _ := m.Update(descLoadedMsg{target: "abc", desc: "x", err: nil})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal (kept)", got.mode)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (kept after stale msg)", got.modal)
 	}
 }
 
-// descLoadedMsg(err): modeNormal に戻り、err を立てる。
+// descLoadedMsg(err): modal 閉じる + err セット。
 func TestDescLoadedErrorReturnsToNormal(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribingLoading
-	m.descTarget = "abc"
+	m.modal = newDescribeModal("abc", 80)
 	wantErr := errors.New("not found")
 	updated, _ := m.Update(descLoadedMsg{target: "abc", err: wantErr})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal (err recovers)", got.mode)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (err recovers)", got.modal)
 	}
 	if got.err != wantErr {
 		t.Errorf("err = %v, want %v", got.err, wantErr)
 	}
 }
 
-// describingLoading 中の Esc でキャンセル → modeNormal、descTarget リセット。
+// describing loading 中の Esc: modal 閉じる。
 func TestKeyEscCancelsDescribingLoading(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribingLoading
-	m.descTarget = "abc"
+	m.modal = newDescribeModal("abc", 80)
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal", got.mode)
-	}
-	if got.descTarget != "" {
-		t.Errorf("descTarget = %q, want empty (reset on cancel)", got.descTarget)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil", got.modal)
 	}
 }
 
-// Issue #3: describing modal — textinput で seed を編集し Enter で確定。
-// Task 7 の暫定挙動 (descLoadedMsg{err: nil} → modeNormal) をここで本来の遷移
-// (modeDescribing + textinput.SetValue + Focus blink) に書き換える。
-
-// descLoadedMsg(成功): modeDescribing に遷移、textinput に seed セット、Cmd は Focus blink。
+// descLoadedMsg(成功): loading=false へ遷移、input に seed セット、Cmd は Focus blink。
 func TestDescLoadedTransitionsToDescribingWithSeed(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribingLoading
-	m.descTarget = "abc"
+	m.modal = newDescribeModal("abc", 80)
 	updated, cmd := m.Update(descLoadedMsg{target: "abc", desc: "feat: hello"})
 	got := updated.(Model)
-	if got.mode != modeDescribing {
-		t.Errorf("mode = %v, want modeDescribing", got.mode)
+	dm, ok := got.modal.(describeModal)
+	if !ok {
+		t.Fatalf("modal = %T, want describeModal", got.modal)
 	}
-	if got.descInput.Value() != "feat: hello" {
-		t.Errorf("descInput.Value() = %q, want %q", got.descInput.Value(), "feat: hello")
+	if dm.loading {
+		t.Errorf("loading = true, want false (advanced to editing)")
+	}
+	if dm.input.Value() != "feat: hello" {
+		t.Errorf("input.Value() = %q, want %q", dm.input.Value(), "feat: hello")
 	}
 	if cmd == nil {
 		t.Errorf("cmd = nil, want non-nil (Focus blink)")
 	}
 }
 
-// describing 中の Enter: jj describe 発射、mode=normal、opInFlight=true、textinput リセット。
+// describing 中の Enter: jj describe 発射、modal 閉じる、opInFlight=true。
 func TestDescribingSubmitFiresDescribeCmd(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribing
-	m.descTarget = "abc"
-	m.descInput.SetValue("new description")
+	input := textinput.New()
+	input.SetValue("new description")
+	m.modal = describeModal{target: "abc", loading: false, input: input}
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal", got.mode)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil", got.modal)
 	}
 	if !got.opInFlight {
 		t.Errorf("opInFlight = false, want true")
@@ -543,50 +523,74 @@ func TestDescribingSubmitFiresDescribeCmd(t *testing.T) {
 	}
 }
 
-// describing 中の Esc: mode=normal、textinput リセット、opInFlight 変化なし。
+// describing 中の Esc: modal 閉じる、opInFlight 変化なし。
 func TestDescribingEscCancels(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribing
-	m.descInput.SetValue("draft")
+	input := textinput.New()
+	input.SetValue("draft")
+	m.modal = describeModal{target: "abc", loading: false, input: input}
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got := updated.(Model)
-	if got.mode != modeNormal {
-		t.Errorf("mode = %v, want modeNormal", got.mode)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil", got.modal)
 	}
-	if got.descInput.Value() != "" {
-		t.Errorf("descInput.Value() = %q, want empty (reset)", got.descInput.Value())
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false (cancel)")
 	}
 }
 
-// describing 中の通常キー (例: 'j') は textinput に流れる → 値に追加される。
-// 'y' を試したいが、'y' は Confirm binding なので Confirm 経由で submit になる。
-// describing では Submit (= Enter のみ) と Cancel (= Esc のみ) を区別する設計が必要。
-// このテストは「'j' のような modeNormal で Down にマップされるキーが、describing 中は
-// textinput に流れる」ことを検証する。
+// describing 中の 'j' は textinput に流れる → 値に追加される。
 func TestDescribingNormalKeysGoToInput(t *testing.T) {
 	m := New()
 	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
 	m.logSel = 0
-	m.mode = modeDescribing
-	m.descInput.Focus()
+	input := textinput.New()
+	input.Focus()
+	m.modal = describeModal{target: "abc", loading: false, input: input}
 	updated, _ := m.Update(keyPress('j'))
 	got := updated.(Model)
-	if got.descInput.Value() != "j" {
-		t.Errorf("descInput.Value() = %q, want %q (j typed into input)", got.descInput.Value(), "j")
+	dm, ok := got.modal.(describeModal)
+	if !ok {
+		t.Fatalf("modal = %T, want describeModal", got.modal)
+	}
+	if dm.input.Value() != "j" {
+		t.Errorf("input.Value() = %q, want %q (j typed into input)", dm.input.Value(), "j")
 	}
 }
 
-// Issue #3: WindowSizeMsg を受けたら descInput の Width も追従して更新される。
-// 起動時の幅で固まらず、ターミナルリサイズに反応する。
-// modal box = min(60, m.width-4), padding(1, 2) で左右 4 引いた内寸が input 幅。
-func TestWindowSizeUpdatesDescInputWidth(t *testing.T) {
+// WindowSize 後に describe modal を開くと、input が現在幅で正しくサイズされる。
+// modal box = min(60, m.width-4)、padding(1, 2) で左右 4 引いた内寸が input 幅。
+func TestDescribeModalSizesInputFromCurrentWidth(t *testing.T) {
 	m := New()
+	m.log = &jjlog.Log{Rows: []jjlog.Row{{ChangeID: "abc", IsWC: true, Lines: []string{"x"}}}}
+	m.logSel = 0
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = updated.(Model)
+	updated, _ = m.Update(keyPress('d'))
+	m = updated.(Model)
+	dm, ok := m.modal.(describeModal)
+	if !ok {
+		t.Fatalf("modal = %T, want describeModal", m.modal)
+	}
+	// boxW = min(60, 100-4) = 60, padding 2*2 = 4, input 幅 = 56。
+	if w := dm.input.Width(); w != 56 {
+		t.Errorf("input.Width() = %d, want 56", w)
+	}
+}
+
+// 既に open している describe modal も WindowSize で resize される。
+func TestWindowSizeResizesActiveDescribeModal(t *testing.T) {
+	m := New()
+	m.modal = newDescribeModal("abc", 40) // 初期幅 40 → input width 32
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	got := updated.(Model)
-	// boxW = min(60, 100-4) = 60, padding 2*2 = 4, よって input 幅 = 56。
-	if w := got.descInput.Width(); w != 56 {
-		t.Errorf("descInput.Width() = %d, want 56", w)
+	dm, ok := got.modal.(describeModal)
+	if !ok {
+		t.Fatalf("modal = %T, want describeModal", got.modal)
+	}
+	if w := dm.input.Width(); w != 56 {
+		t.Errorf("input.Width() = %d, want 56 after resize", w)
 	}
 }
