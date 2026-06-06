@@ -93,3 +93,23 @@ func TestDescriptionArgs(t *testing.T) {
 		t.Errorf("descriptionArgs = %v, want %v", got, want)
 	}
 }
+
+// Issue #4: bookmark 操作2種の引数組み立てを固定する。
+// list は --all-remotes と -T を必ず付け、move は <name> --to <target> の順番で渡す。
+// 実行部 (BookmarkListRaw / BookmarkMove) は実 jj が要るため手動確認に委ねる。
+
+func TestBookmarkListArgs(t *testing.T) {
+	got := bookmarkListArgs("TPL")
+	want := []string{"bookmark", "list", "--no-pager", "--all-remotes", "-T", "TPL"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("bookmarkListArgs = %v, want %v", got, want)
+	}
+}
+
+func TestBookmarkMoveArgs(t *testing.T) {
+	got := bookmarkMoveArgs("feature", "@")
+	want := []string{"bookmark", "move", "--no-pager", "feature", "--to", "@"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("bookmarkMoveArgs = %v, want %v", got, want)
+	}
+}
