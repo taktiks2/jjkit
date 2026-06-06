@@ -188,6 +188,19 @@ func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.modal = abandonModal{target: target}
 		return m, nil
+	case key.Matches(msg, m.keys.Advance):
+		if m.opInFlight {
+			return m, nil
+		}
+		if m.focus != paneBookmarks {
+			return m, nil
+		}
+		name := m.bookmarks.SelectedName()
+		if name == "" {
+			return m, nil
+		}
+		m.opInFlight = true
+		return m, jjBookmarkAdvanceCmd(name)
 	case key.Matches(msg, m.keys.Describe):
 		if m.opInFlight {
 			return m, nil
@@ -281,5 +294,12 @@ func jjEditCmd(change string) tea.Cmd {
 	}
 	return func() tea.Msg {
 		return opResultMsg{err: jj.Edit(change)}
+	}
+}
+
+// jjBookmarkAdvanceCmd は <name> を @ に進める Cmd。成功・失敗どちらも opResultMsg に乗せる。
+func jjBookmarkAdvanceCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		return opResultMsg{err: jj.BookmarkMove(name, "@")}
 	}
 }

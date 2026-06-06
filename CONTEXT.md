@@ -63,6 +63,7 @@ Move a bookmark forward to a newer change so it follows recent work. Generalises
 user's `jj tug` alias ("move the nearest ancestor bookmark to `@-`"). In jjkit the
 user advances a bookmark by selecting it in the Bookmarks pane and moving it to `@`.
 _Avoid_: tug (alias-specific), push (push is a separate, remote operation).
+_Key_: `.` (Bookmarks pane focus 中のみ).
 
 ## Example dialogue
 
