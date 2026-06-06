@@ -215,6 +215,8 @@ func moveSelection(m Model, delta int) Model {
 		m.files.Move(delta)
 	case paneLog:
 		m.log.Move(delta)
+	case paneBookmarks:
+		m.bookmarks.Move(delta)
 	}
 	return m
 }
