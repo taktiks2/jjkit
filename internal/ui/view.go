@@ -71,7 +71,7 @@ func (m Model) bodyView() string {
 	left := lipgloss.JoinVertical(lipgloss.Left,
 		paneBox("Log", m.log.View(), l.log, m.focus == paneLog),
 		paneBox("Files", m.files.View(), l.files, m.focus == paneFiles),
-		paneBox("Bookmarks", "(coming soon)", l.bookmarks, m.focus == paneBookmarks),
+		paneBox("Bookmarks", m.bookmarks.View(), l.bookmarks, m.focus == paneBookmarks),
 		paneBox("Oplog", "(coming soon)", l.oplog, false),
 	)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, paneBox("Diff", m.diff.View(), l.diff, false))
