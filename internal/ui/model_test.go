@@ -613,3 +613,22 @@ func TestBookmarksLoadedMsgAppliesToPane(t *testing.T) {
 		t.Errorf("bodyView missing bookmark line\n%s", got.bodyView())
 	}
 }
+
+// Issue #4: focus が paneBookmarks のとき j/k が bookmarks の選択を動かし、log は動かさないこと。
+func TestMoveSelectionRoutesToBookmarks(t *testing.T) {
+	m := New()
+	m.log.log = twoRowLog()
+	m.bookmarks.Apply([]jjbookmark.Bookmark{
+		{Name: "a", LocalTarget: &jjbookmark.Target{ChangeID: "11111111"}},
+		{Name: "b", LocalTarget: &jjbookmark.Target{ChangeID: "22222222"}},
+	})
+	m.log.sel = 0
+	m.focus = paneBookmarks
+	m = moveSelection(m, +1)
+	if got := m.bookmarks.SelectedName(); got != "b" {
+		t.Errorf("Bookmarks focus +1: bookmarks.SelectedName = %q, want %q", got, "b")
+	}
+	if m.log.sel != 0 {
+		t.Errorf("Bookmarks focus +1: log.sel = %d, want 0 (log untouched)", m.log.sel)
+	}
+}
