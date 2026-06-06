@@ -145,3 +145,30 @@ func Description(change string) (string, error) {
 	}
 	return strings.TrimRight(string(out), "\n"), nil
 }
+
+func bookmarkListArgs(template string) []string {
+	return []string{"bookmark", "list", "--no-pager", "--all-remotes", "-T", template}
+}
+
+// BookmarkListRaw は --all-remotes + 指定テンプレートで bookmark list を実行し、生バイトを返す。
+func BookmarkListRaw(template string) ([]byte, error) {
+	out, err := exec.Command("jj", bookmarkListArgs(template)...).Output()
+	if err != nil {
+		return nil, wrap("jj bookmark list", err)
+	}
+	return out, nil
+}
+
+func bookmarkMoveArgs(name, to string) []string {
+	return []string{"bookmark", "move", "--no-pager", name, "--to", to}
+}
+
+// BookmarkMove は bookmark <name> を target に進める（既存 ref を上書き、新規作成はしない）。
+// jj が拒否する場合は stderr を error に乗せる（wrap が hook 済み）。
+func BookmarkMove(name, to string) error {
+	_, err := exec.Command("jj", bookmarkMoveArgs(name, to)...).Output()
+	if err != nil {
+		return wrap("jj bookmark move", err)
+	}
+	return nil
+}
