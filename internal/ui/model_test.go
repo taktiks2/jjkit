@@ -632,3 +632,48 @@ func TestMoveSelectionRoutesToBookmarks(t *testing.T) {
 		t.Errorf("Bookmarks focus +1: log.sel = %d, want 0 (log untouched)", m.log.sel)
 	}
 }
+
+// Issue #4: '.' で focus==paneBookmarks のとき opInFlight が立ち、Cmd が返ること。
+func TestAdvanceKeyFiresOpAndSetsInFlight(t *testing.T) {
+	m := New()
+	m.bookmarks.Apply([]jjbookmark.Bookmark{
+		{Name: "feature", LocalTarget: &jjbookmark.Target{ChangeID: "kqlu1234"}},
+	})
+	m.focus = paneBookmarks
+	updated, cmd := m.Update(keyPress('.'))
+	got := updated.(Model)
+	if !got.opInFlight {
+		t.Error("opInFlight = false, want true after advance key")
+	}
+	if cmd == nil {
+		t.Error("cmd = nil, want non-nil Cmd that fires jj bookmark move")
+	}
+}
+
+// focus が paneLog のとき '.' は no-op。
+func TestAdvanceKeyNoOpOutsideBookmarks(t *testing.T) {
+	m := New()
+	m.focus = paneLog
+	updated, cmd := m.Update(keyPress('.'))
+	got := updated.(Model)
+	if got.opInFlight {
+		t.Error("opInFlight = true, want false (advance only fires from bookmarks pane)")
+	}
+	if cmd != nil {
+		t.Error("cmd != nil, want nil")
+	}
+}
+
+// 選択 bookmark が空（items 空）なら no-op。
+func TestAdvanceKeyNoOpEmpty(t *testing.T) {
+	m := New()
+	m.focus = paneBookmarks
+	updated, cmd := m.Update(keyPress('.'))
+	got := updated.(Model)
+	if got.opInFlight {
+		t.Error("opInFlight = true on empty bookmarks")
+	}
+	if cmd != nil {
+		t.Error("cmd != nil on empty bookmarks")
+	}
+}
