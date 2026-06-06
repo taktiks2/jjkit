@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/taktiks2/jjkit/internal/jjbookmark"
 	"github.com/taktiks2/jjkit/internal/jjdiff"
 	"github.com/taktiks2/jjkit/internal/jjlog"
 )
@@ -592,5 +593,23 @@ func TestWindowSizeResizesActiveDescribeModal(t *testing.T) {
 	}
 	if w := dm.input.Width(); w != 56 {
 		t.Errorf("input.Width() = %d, want 56 after resize", w)
+	}
+}
+
+// Issue #4: bookmarksLoadedMsg を流すと Model.bookmarks に反映され、View に出ること。
+func TestBookmarksLoadedMsgAppliesToPane(t *testing.T) {
+	m := New()
+	m.width, m.height = 120, 40
+	m.ready = true
+	m.applyLayout()
+	updated, _ := m.Update(bookmarksLoadedMsg{items: []jjbookmark.Bookmark{
+		{Name: "feature", LocalTarget: &jjbookmark.Target{ChangeID: "kqlu1234"}},
+	}})
+	got := updated.(Model)
+	if got.bookmarks.SelectedName() != "feature" {
+		t.Errorf("bookmarks.SelectedName = %q, want %q", got.bookmarks.SelectedName(), "feature")
+	}
+	if !strings.Contains(got.bodyView(), "feature → kqlu1234") {
+		t.Errorf("bodyView missing bookmark line\n%s", got.bodyView())
 	}
 }

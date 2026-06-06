@@ -22,6 +22,7 @@ func TestApplyLayoutSizesAllViewports(t *testing.T) {
 		{"log", m.log.vp.Width(), m.log.vp.Height(), want.log},
 		{"files", m.files.vp.Width(), m.files.vp.Height(), want.files},
 		{"diff", m.diff.vp.Width(), m.diff.vp.Height(), want.diff},
+		{"bookmarks", m.bookmarks.vp.Width(), m.bookmarks.vp.Height(), want.bookmarks},
 	}
 	for _, c := range cases {
 		wantW := max(c.want.w-2, 0)
