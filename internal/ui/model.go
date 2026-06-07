@@ -216,6 +216,12 @@ func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.modal = newDescribeModal(target, m.width)
 		return m, descSeedCmd(target)
+	case key.Matches(msg, m.keys.Undo):
+		if m.opInFlight {
+			return m, nil
+		}
+		m.modal = undoModal{}
+		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
 		return m, loadLog
 	case key.Matches(msg, m.keys.Help):
