@@ -23,6 +23,7 @@ type keyMap struct {
 	Submit   key.Binding
 	Advance  key.Binding
 	Undo     key.Binding
+	Restore  key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -42,17 +43,18 @@ func newKeyMap() keyMap {
 		Submit:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
 		Advance:  key.NewBinding(key.WithKeys("."), key.WithHelp(".", "advance")),
 		Undo:     key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
+		Restore:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "restore op")),
 	}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.New, k.Edit, k.Describe, k.Abandon, k.Advance, k.Undo, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.New, k.Edit, k.Describe, k.Abandon, k.Advance, k.Undo, k.Restore, k.Refresh, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down},
-		{k.New, k.Edit, k.Describe, k.Abandon, k.Advance, k.Undo},
+		{k.New, k.Edit, k.Describe, k.Abandon, k.Advance, k.Undo, k.Restore},
 		{k.Refresh, k.Tab},
 		{k.Help, k.Quit},
 	}

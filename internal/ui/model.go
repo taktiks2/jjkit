@@ -222,6 +222,19 @@ func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.modal = undoModal{}
 		return m, nil
+	case key.Matches(msg, m.keys.Restore):
+		if m.opInFlight {
+			return m, nil
+		}
+		if m.focus != paneOplog {
+			return m, nil
+		}
+		target := m.oplog.SelectedID()
+		if target == "" {
+			return m, nil
+		}
+		m.modal = restoreModal{target: target}
+		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
 		return m, loadLog
 	case key.Matches(msg, m.keys.Help):
