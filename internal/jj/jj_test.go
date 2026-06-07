@@ -113,3 +113,35 @@ func TestBookmarkMoveArgs(t *testing.T) {
 		t.Errorf("bookmarkMoveArgs = %v, want %v", got, want)
 	}
 }
+
+// Issue #5: oplog 3 関数の引数組み立てを固定する。
+// op log は --color always で色を強制（後段の sentinel parser が --color always 前提）、
+// undo / op restore は色不要なので --no-pager のみ。
+// 実行部（実 jj が要る）は手動確認に委ねる。
+
+// opLogArgs: jj op log --no-pager --color always -T <template>
+func TestOpLogArgs(t *testing.T) {
+	got := opLogArgs("TPL")
+	want := []string{"op", "log", "--no-pager", "--color", "always", "-T", "TPL"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("opLogArgs = %v, want %v", got, want)
+	}
+}
+
+// undoArgs: jj undo --no-pager （引数なし、直前 op を取り消す）
+func TestUndoArgs(t *testing.T) {
+	got := undoArgs()
+	want := []string{"undo", "--no-pager"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("undoArgs = %v, want %v", got, want)
+	}
+}
+
+// opRestoreArgs: jj op restore --no-pager <op-id>
+func TestOpRestoreArgs(t *testing.T) {
+	got := opRestoreArgs("aaaa11112222")
+	want := []string{"op", "restore", "--no-pager", "aaaa11112222"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("opRestoreArgs = %v, want %v", got, want)
+	}
+}

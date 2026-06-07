@@ -11,6 +11,7 @@ import (
 	"github.com/taktiks2/jjkit/internal/jjbookmark"
 	"github.com/taktiks2/jjkit/internal/jjdiff"
 	"github.com/taktiks2/jjkit/internal/jjlog"
+	"github.com/taktiks2/jjkit/internal/jjop"
 )
 
 // テスト用の 2 change ログ。row0=通常(1行)、row1=作業コピー(@, 2行)。
@@ -175,7 +176,8 @@ func TestFilesLoadedSetsFilesAndResetsSelection(t *testing.T) {
 	}
 }
 
-// Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回。
+// Tab が focusCycle（Log → Files → Bookmarks → Oplog → Log）を巡回。
+// Issue #5 で Oplog が cycle に入る（それまでは "(coming soon)" の placeholder）。
 func TestTabCyclesFocus(t *testing.T) {
 	m := New()
 	if m.focus != paneLog {
@@ -190,8 +192,12 @@ func TestTabCyclesFocus(t *testing.T) {
 		t.Errorf("after 2 Tabs: focus = %v, want paneBookmarks", m.focus)
 	}
 	m = m.cycleFocus()
+	if m.focus != paneOplog {
+		t.Errorf("after 3 Tabs: focus = %v, want paneOplog", m.focus)
+	}
+	m = m.cycleFocus()
 	if m.focus != paneLog {
-		t.Errorf("after 3 Tabs: focus = %v, want paneLog (wrap)", m.focus)
+		t.Errorf("after 4 Tabs: focus = %v, want paneLog (wrap)", m.focus)
 	}
 }
 
@@ -675,5 +681,214 @@ func TestAdvanceKeyNoOpEmpty(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("cmd != nil on empty bookmarks")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Issue #5: Oplog pane wiring
+// ---------------------------------------------------------------------------
+
+// oplogLoadedMsg を流すと Model.oplog に反映され、bodyView に op-id が出る
+// （"(coming soon)" の placeholder を置き換える）。
+func TestOplogLoadedMsgAppliesToPane(t *testing.T) {
+	m := New()
+	m.width, m.height = 120, 40
+	m.ready = true
+	m.applyLayout()
+	ol := &jjop.OpLog{Rows: []jjop.Row{
+		{ID: "aaaa11112222", Lines: []string{"@  aaaa11112222 now"}},
+	}}
+	updated, _ := m.Update(oplogLoadedMsg{log: ol})
+	got := updated.(Model)
+	if got.oplog.SelectedID() != "aaaa11112222" {
+		t.Errorf("oplog.SelectedID = %q, want %q", got.oplog.SelectedID(), "aaaa11112222")
+	}
+	body := got.bodyView()
+	if !strings.Contains(body, "aaaa11112222") {
+		t.Errorf("bodyView missing op-id\n%s", body)
+	}
+	if strings.Contains(body, "(coming soon)") {
+		t.Errorf("bodyView still shows placeholder\n%s", body)
+	}
+}
+
+// 'u' 押下: modal=undoModal、Cmd は nil（まだ jj を叩かない）。
+// 直前の operation を破棄するため、念のため確認ダイアログを挟む。
+func TestKeyUndoEntersConfirming(t *testing.T) {
+	m := New()
+	updated, cmd := m.Update(keyPress('u'))
+	got := updated.(Model)
+	if _, ok := got.modal.(undoModal); !ok {
+		t.Fatalf("modal = %T, want undoModal", got.modal)
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (no op yet, just modal)", cmd)
+	}
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false (no op yet)")
+	}
+}
+
+// undo modal 中の Enter: jj undo 発射、modal 閉じる、opInFlight=true。
+func TestUndoConfirmFiresCmd(t *testing.T) {
+	m := New()
+	m.modal = undoModal{}
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil after confirm", got.modal)
+	}
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true (jj undo fired)")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want jj undo Cmd")
+	}
+}
+
+// undo modal 中の Esc: modal 閉じる、opInFlight 変化なし、Cmd nil。
+func TestUndoCancelReturnsToNormal(t *testing.T) {
+	m := New()
+	m.modal = undoModal{}
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (Esc cancels)", got.modal)
+	}
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false")
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+}
+
+// opInFlight 中の 'u' は無視。
+func TestKeyUndoIgnoredWhenOpInFlight(t *testing.T) {
+	m := New()
+	m.opInFlight = true
+	updated, cmd := m.Update(keyPress('u'))
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (gated by opInFlight)", got.modal)
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+}
+
+// Enter 押下 (Oplog focused & 選択あり): modal=restoreModal{target}、Cmd は nil。
+// 巻き戻し先の op を引数付き modal に閉じ込めて確認ダイアログを出す。
+func TestKeyRestoreEntersConfirmingWithSelectedOpID(t *testing.T) {
+	m := New()
+	m.oplog.Apply(&jjop.OpLog{Rows: []jjop.Row{
+		{ID: "aaaa11112222", Lines: []string{"@  aaaa11112222 now"}},
+		{ID: "bbbb33334444", Lines: []string{"○  bbbb33334444 ago"}},
+	}})
+	m.focus = paneOplog
+	m.oplog.Move(+1) // 2 番目を選択
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	rm, ok := got.modal.(restoreModal)
+	if !ok {
+		t.Fatalf("modal = %T, want restoreModal", got.modal)
+	}
+	if rm.target != "bbbb33334444" {
+		t.Errorf("modal.target = %q, want %q", rm.target, "bbbb33334444")
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (no op yet, just modal)", cmd)
+	}
+}
+
+// restore modal 中の Enter: jj op restore 発射、modal 閉じる、opInFlight=true。
+func TestRestoreConfirmFiresCmd(t *testing.T) {
+	m := New()
+	m.modal = restoreModal{target: "aaaa11112222"}
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil after confirm", got.modal)
+	}
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true (jj op restore fired)")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want jj op restore Cmd")
+	}
+}
+
+// restore modal 中の Esc: modal 閉じる、opInFlight 変化なし、Cmd nil。
+func TestRestoreCancelReturnsToNormal(t *testing.T) {
+	m := New()
+	m.modal = restoreModal{target: "aaaa11112222"}
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (Esc cancels)", got.modal)
+	}
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false")
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+}
+
+// focus が paneOplog 以外なら Enter は no-op（Restore は oplog ペイン専用キー）。
+// ※ describe modal 中などの Enter は modal が捌くので、ここでは modal nil の通常モードを検証する。
+func TestKeyRestoreNoOpOutsideOplog(t *testing.T) {
+	m := New()
+	m.oplog.Apply(&jjop.OpLog{Rows: []jjop.Row{
+		{ID: "aaaa11112222", Lines: []string{"x"}},
+	}})
+	m.focus = paneLog
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (Enter only opens restoreModal from oplog pane)", got.modal)
+	}
+}
+
+// 選択 op が空（oplog empty）なら no-op。
+func TestKeyRestoreNoOpWhenNoSelection(t *testing.T) {
+	m := New()
+	m.focus = paneOplog
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (no op selected)", got.modal)
+	}
+}
+
+// opInFlight 中の Enter は無視。
+func TestKeyRestoreIgnoredWhenOpInFlight(t *testing.T) {
+	m := New()
+	m.oplog.Apply(&jjop.OpLog{Rows: []jjop.Row{{ID: "aaaa11112222", Lines: []string{"x"}}}})
+	m.focus = paneOplog
+	m.opInFlight = true
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (gated by opInFlight)", got.modal)
+	}
+}
+
+// focus が paneOplog のとき j/k が oplog の選択を動かし、log/bookmarks は動かさない。
+func TestMoveSelectionRoutesToOplog(t *testing.T) {
+	m := New()
+	m.log.log = twoRowLog()
+	m.oplog.Apply(&jjop.OpLog{Rows: []jjop.Row{
+		{ID: "aaaa11112222", Lines: []string{"a"}},
+		{ID: "bbbb33334444", Lines: []string{"b"}},
+	}})
+	m.log.sel = 0
+	m.focus = paneOplog
+	m = moveSelection(m, +1)
+	if got := m.oplog.SelectedID(); got != "bbbb33334444" {
+		t.Errorf("Oplog focus +1: oplog.SelectedID = %q, want bbbb33334444", got)
+	}
+	if m.log.sel != 0 {
+		t.Errorf("Oplog focus +1: log.sel = %d, want 0 (log untouched)", m.log.sel)
 	}
 }
