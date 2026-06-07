@@ -21,7 +21,7 @@ const (
 	paneOplog
 )
 
-var focusCycle = []pane{paneLog, paneFiles, paneBookmarks}
+var focusCycle = []pane{paneLog, paneFiles, paneBookmarks, paneOplog}
 
 func (m Model) cycleFocus() Model {
 	cur := slices.Index(focusCycle, m.focus)
@@ -56,6 +56,7 @@ type Model struct {
 	files     filesPane
 	diff      diffPane
 	bookmarks bookmarksPane
+	oplog     oplogPane
 
 	width  int
 	height int
@@ -77,8 +78,8 @@ func New() Model {
 	}
 }
 
-// Init は起動時に最初の log + bookmarks 読込を仕掛ける。
-func (m Model) Init() tea.Cmd { return tea.Batch(loadLog, bookmarksCmd) }
+// Init は起動時に最初の log + bookmarks + oplog 読込を仕掛ける。
+func (m Model) Init() tea.Cmd { return tea.Batch(loadLog, bookmarksCmd, oplogCmd) }
 
 // Update はメッセージを受けて状態を更新する（Bubble Tea の中心）。
 // modal active 時はキー押下を modal に委譲し、未知の async msg も modal へ流す。
@@ -108,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = nil
-		return m, tea.Batch(loadLog, bookmarksCmd, filesCmd(m.log.SelectedChangeID()), diffCmd(m.currentDiffReq()))
+		return m, tea.Batch(loadLog, bookmarksCmd, oplogCmd, filesCmd(m.log.SelectedChangeID()), diffCmd(m.currentDiffReq()))
 	case filesLoadedMsg:
 		m.files.Apply(msg, m.log.SelectedChangeID())
 		return m, nil
@@ -117,6 +118,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case bookmarksLoadedMsg:
 		m.bookmarks.Apply(msg.items)
+		return m, nil
+	case oplogLoadedMsg:
+		m.err = nil
+		m.oplog.Apply(msg.log)
 		return m, nil
 	case tea.KeyPressMsg:
 		if m.modal != nil {
@@ -230,6 +235,8 @@ func moveSelection(m Model, delta int) Model {
 		m.log.Move(delta)
 	case paneBookmarks:
 		m.bookmarks.Move(delta)
+	case paneOplog:
+		m.oplog.Move(delta)
 	}
 	return m
 }
@@ -243,6 +250,7 @@ func (m *Model) applyLayout() {
 	m.files.Resize(l.files)
 	m.diff.Resize(l.diff)
 	m.bookmarks.Resize(l.bookmarks)
+	m.oplog.Resize(l.oplog)
 }
 
 // setVP は外寸 rect から枠(2)とタイトル行(1)を引いた内寸を viewport に渡す。
