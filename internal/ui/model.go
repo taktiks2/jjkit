@@ -32,6 +32,17 @@ func (m Model) cycleFocus() Model {
 	return m
 }
 
+// cycleFocusBackward は focusCycle を逆方向に1つ進める (h キー用)。
+func (m Model) cycleFocusBackward() Model {
+	cur := slices.Index(focusCycle, m.focus)
+	if cur < 0 {
+		panic("focus not in focusCycle")
+	}
+	n := len(focusCycle)
+	m.focus = focusCycle[(cur-1+n)%n]
+	return m
+}
+
 // 横断的な非同期メッセージ。pane 固有の logLoadedMsg / filesLoadedMsg / diffLoadedMsg
 // は各 pane_*.go に居る。descLoadedMsg は describeModal が消費する。
 type (
@@ -157,6 +168,12 @@ func (m Model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadAfterMove()
 	case key.Matches(msg, m.keys.Tab):
 		m = m.cycleFocus()
+		return m, diffCmd(m.currentDiffReq())
+	case key.Matches(msg, m.keys.FocusNext):
+		m = m.cycleFocus()
+		return m, diffCmd(m.currentDiffReq())
+	case key.Matches(msg, m.keys.FocusPrev):
+		m = m.cycleFocusBackward()
 		return m, diffCmd(m.currentDiffReq())
 	case key.Matches(msg, m.keys.New):
 		if m.opInFlight {
