@@ -677,3 +677,54 @@ func TestAdvanceKeyNoOpEmpty(t *testing.T) {
 		t.Error("cmd != nil on empty bookmarks")
 	}
 }
+
+// h/l ペイン巡回: l = forward (Tab と同じ方向), h = backward。
+// focusCycle = [Log, Files, Bookmarks]。
+
+// l: Log → Files (forward 1 step)。
+func TestFocusNextCyclesForward(t *testing.T) {
+	m := New()
+	if m.focus != paneLog {
+		t.Fatalf("initial focus = %v, want paneLog", m.focus)
+	}
+	updated, _ := m.Update(keyPress('l'))
+	got := updated.(Model)
+	if got.focus != paneFiles {
+		t.Errorf("after l: focus = %v, want paneFiles", got.focus)
+	}
+}
+
+// l: Bookmarks → Log (forward wrap)。
+func TestFocusNextWraps(t *testing.T) {
+	m := New()
+	m.focus = paneBookmarks
+	updated, _ := m.Update(keyPress('l'))
+	got := updated.(Model)
+	if got.focus != paneLog {
+		t.Errorf("after l from Bookmarks: focus = %v, want paneLog (wrap)", got.focus)
+	}
+}
+
+// h: Log → Bookmarks (backward wrap)。
+func TestFocusPrevWraps(t *testing.T) {
+	m := New()
+	if m.focus != paneLog {
+		t.Fatalf("initial focus = %v, want paneLog", m.focus)
+	}
+	updated, _ := m.Update(keyPress('h'))
+	got := updated.(Model)
+	if got.focus != paneBookmarks {
+		t.Errorf("after h from Log: focus = %v, want paneBookmarks (wrap)", got.focus)
+	}
+}
+
+// h: Bookmarks → Files (backward 1 step)。
+func TestFocusPrevCyclesBackward(t *testing.T) {
+	m := New()
+	m.focus = paneBookmarks
+	updated, _ := m.Update(keyPress('h'))
+	got := updated.(Model)
+	if got.focus != paneFiles {
+		t.Errorf("after h from Bookmarks: focus = %v, want paneFiles", got.focus)
+	}
+}

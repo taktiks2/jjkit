@@ -8,50 +8,54 @@ import (
 // keyMap は Log ペインのキーバインド一式。help パッケージに渡すと
 // フッターやヘルプ一覧を自動生成してくれる。
 type keyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	Refresh  key.Binding
-	Help     key.Binding
-	Tab      key.Binding
-	Quit     key.Binding
-	New      key.Binding
-	Edit     key.Binding
-	Abandon  key.Binding
-	Confirm  key.Binding
-	Cancel   key.Binding
-	Describe key.Binding
-	Submit   key.Binding
-	Advance  key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	Refresh   key.Binding
+	Help      key.Binding
+	Tab       key.Binding
+	Quit      key.Binding
+	New       key.Binding
+	Edit      key.Binding
+	Abandon   key.Binding
+	Confirm   key.Binding
+	Cancel    key.Binding
+	Describe  key.Binding
+	Submit    key.Binding
+	Advance   key.Binding
+	FocusPrev key.Binding
+	FocusNext key.Binding
 }
 
 func newKeyMap() keyMap {
 	return keyMap{
-		Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		Tab:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus")),
-		Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-		New:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
-		Edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
-		Abandon:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon")),
-		Confirm:  key.NewBinding(key.WithKeys("enter", "y"), key.WithHelp("enter/y", "confirm")),
-		Cancel:   key.NewBinding(key.WithKeys("esc", "n"), key.WithHelp("esc/n", "cancel")),
-		Describe: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "describe")),
-		Submit:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
-		Advance:  key.NewBinding(key.WithKeys("."), key.WithHelp(".", "advance")),
+		Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+		Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		Refresh:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+		Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Tab:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus")),
+		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		New:       key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
+		Edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
+		Abandon:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon")),
+		Confirm:   key.NewBinding(key.WithKeys("enter", "y"), key.WithHelp("enter/y", "confirm")),
+		Cancel:    key.NewBinding(key.WithKeys("esc", "n"), key.WithHelp("esc/n", "cancel")),
+		Describe:  key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "describe")),
+		Submit:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
+		Advance:   key.NewBinding(key.WithKeys("."), key.WithHelp(".", "advance")),
+		FocusPrev: key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "prev pane")),
+		FocusNext: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "next pane")),
 	}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.New, k.Edit, k.Describe, k.Abandon, k.Advance, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.FocusPrev, k.FocusNext, k.New, k.Edit, k.Describe, k.Abandon, k.Advance, k.Refresh, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down},
 		{k.New, k.Edit, k.Describe, k.Abandon, k.Advance},
-		{k.Refresh, k.Tab},
+		{k.Refresh, k.Tab, k.FocusPrev, k.FocusNext},
 		{k.Help, k.Quit},
 	}
 }
