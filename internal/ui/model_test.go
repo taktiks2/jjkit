@@ -712,6 +712,71 @@ func TestOplogLoadedMsgAppliesToPane(t *testing.T) {
 	}
 }
 
+// 'u' 押下: modal=undoModal、Cmd は nil（まだ jj を叩かない）。
+// 直前の operation を破棄するため、念のため確認ダイアログを挟む。
+func TestKeyUndoEntersConfirming(t *testing.T) {
+	m := New()
+	updated, cmd := m.Update(keyPress('u'))
+	got := updated.(Model)
+	if _, ok := got.modal.(undoModal); !ok {
+		t.Fatalf("modal = %T, want undoModal", got.modal)
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil (no op yet, just modal)", cmd)
+	}
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false (no op yet)")
+	}
+}
+
+// undo modal 中の Enter: jj undo 発射、modal 閉じる、opInFlight=true。
+func TestUndoConfirmFiresCmd(t *testing.T) {
+	m := New()
+	m.modal = undoModal{}
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil after confirm", got.modal)
+	}
+	if !got.opInFlight {
+		t.Errorf("opInFlight = false, want true (jj undo fired)")
+	}
+	if cmd == nil {
+		t.Errorf("cmd = nil, want jj undo Cmd")
+	}
+}
+
+// undo modal 中の Esc: modal 閉じる、opInFlight 変化なし、Cmd nil。
+func TestUndoCancelReturnsToNormal(t *testing.T) {
+	m := New()
+	m.modal = undoModal{}
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (Esc cancels)", got.modal)
+	}
+	if got.opInFlight {
+		t.Errorf("opInFlight = true, want false")
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+}
+
+// opInFlight 中の 'u' は無視。
+func TestKeyUndoIgnoredWhenOpInFlight(t *testing.T) {
+	m := New()
+	m.opInFlight = true
+	updated, cmd := m.Update(keyPress('u'))
+	got := updated.(Model)
+	if got.modal != nil {
+		t.Errorf("modal = %T, want nil (gated by opInFlight)", got.modal)
+	}
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+}
+
 // focus が paneOplog のとき j/k が oplog の選択を動かし、log/bookmarks は動かさない。
 func TestMoveSelectionRoutesToOplog(t *testing.T) {
 	m := New()
