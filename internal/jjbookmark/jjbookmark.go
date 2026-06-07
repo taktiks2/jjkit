@@ -9,17 +9,31 @@ import (
 
 // Template は `jj bookmark list --all-remotes -T` に渡す式。
 // 1 行 = 1 ref（local もしくは remote）。タブ区切りで <name> <remote> <change-id> <ahead> <behind>。
+//
+// jj の tracking_*_count は「remote 視点」(tracking_ahead_count = remote が local より N ahead)。
+// 我々の RemoteRef.Ahead/Behind は「local 視点」(local が remote より N ahead/behind) で扱いたいので、
+// テンプレート段階で意図的に入れ替えて出力する:
+//
+//	<ahead> 列  ← tracking_behind_count (remote が local より遅れている = local が ahead)
+//	<behind> 列 ← tracking_ahead_count  (remote が local より進んでいる = local が behind)
+//
+// これで Parse 以降は素直に Ahead = atoi(ahead), Behind = atoi(behind) と書ける。
+//
 // 削除済 ref / local 自身の ahead-behind は "-" を出す。
 const Template = `self.name() ++ "\t" ++ self.remote() ++ "\t" ++ if(self.present(),
 	self.normal_target().change_id().shortest(8), "-") ++ "\t" ++ if(self.remote(),
-	self.tracking_ahead_count().lower() ++ "\t" ++ self.tracking_behind_count().lower(), "-\t-") ++ "\n"`
+	self.tracking_behind_count().lower() ++ "\t" ++ self.tracking_ahead_count().lower(), "-\t-") ++ "\n"`
 
 // Target は ref が指す change の短縮 ID（無ければ親 *Target が nil）。
 type Target struct {
 	ChangeID string
 }
 
-// RemoteRef は1つの remote-tracking 情報。Ahead/Behind は local 視点で何 commit 進んでいる/遅れているか。
+// RemoteRef は1つの remote-tracking 情報。Ahead/Behind は **local 視点**:
+//   - Ahead  = local が remote より N commit 進んでいる (push 必要)
+//   - Behind = local が remote より N commit 遅れている (pull 必要)
+//
+// jj 側は remote 視点で値を返すため、Template 段階で入れ替えて格納している (Template の docstring 参照)。
 type RemoteRef struct {
 	Remote string
 	Target Target
