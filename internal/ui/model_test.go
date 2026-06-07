@@ -11,6 +11,7 @@ import (
 	"github.com/taktiks2/jjkit/internal/jjbookmark"
 	"github.com/taktiks2/jjkit/internal/jjdiff"
 	"github.com/taktiks2/jjkit/internal/jjlog"
+	"github.com/taktiks2/jjkit/internal/jjop"
 )
 
 // テスト用の 2 change ログ。row0=通常(1行)、row1=作業コピー(@, 2行)。
@@ -175,7 +176,8 @@ func TestFilesLoadedSetsFilesAndResetsSelection(t *testing.T) {
 	}
 }
 
-// Tab が focusCycle（Log → Files → Bookmarks → Log）を巡回。
+// Tab が focusCycle（Log → Files → Bookmarks → Oplog → Log）を巡回。
+// Issue #5 で Oplog が cycle に入る（それまでは "(coming soon)" の placeholder）。
 func TestTabCyclesFocus(t *testing.T) {
 	m := New()
 	if m.focus != paneLog {
@@ -190,8 +192,12 @@ func TestTabCyclesFocus(t *testing.T) {
 		t.Errorf("after 2 Tabs: focus = %v, want paneBookmarks", m.focus)
 	}
 	m = m.cycleFocus()
+	if m.focus != paneOplog {
+		t.Errorf("after 3 Tabs: focus = %v, want paneOplog", m.focus)
+	}
+	m = m.cycleFocus()
 	if m.focus != paneLog {
-		t.Errorf("after 3 Tabs: focus = %v, want paneLog (wrap)", m.focus)
+		t.Errorf("after 4 Tabs: focus = %v, want paneLog (wrap)", m.focus)
 	}
 }
 
@@ -675,5 +681,52 @@ func TestAdvanceKeyNoOpEmpty(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("cmd != nil on empty bookmarks")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Issue #5: Oplog pane wiring
+// ---------------------------------------------------------------------------
+
+// oplogLoadedMsg を流すと Model.oplog に反映され、bodyView に op-id が出る
+// （"(coming soon)" の placeholder を置き換える）。
+func TestOplogLoadedMsgAppliesToPane(t *testing.T) {
+	m := New()
+	m.width, m.height = 120, 40
+	m.ready = true
+	m.applyLayout()
+	ol := &jjop.OpLog{Rows: []jjop.Row{
+		{ID: "aaaa11112222", Lines: []string{"@  aaaa11112222 now"}},
+	}}
+	updated, _ := m.Update(oplogLoadedMsg{log: ol})
+	got := updated.(Model)
+	if got.oplog.SelectedID() != "aaaa11112222" {
+		t.Errorf("oplog.SelectedID = %q, want %q", got.oplog.SelectedID(), "aaaa11112222")
+	}
+	body := got.bodyView()
+	if !strings.Contains(body, "aaaa11112222") {
+		t.Errorf("bodyView missing op-id\n%s", body)
+	}
+	if strings.Contains(body, "(coming soon)") {
+		t.Errorf("bodyView still shows placeholder\n%s", body)
+	}
+}
+
+// focus が paneOplog のとき j/k が oplog の選択を動かし、log/bookmarks は動かさない。
+func TestMoveSelectionRoutesToOplog(t *testing.T) {
+	m := New()
+	m.log.log = twoRowLog()
+	m.oplog.Apply(&jjop.OpLog{Rows: []jjop.Row{
+		{ID: "aaaa11112222", Lines: []string{"a"}},
+		{ID: "bbbb33334444", Lines: []string{"b"}},
+	}})
+	m.log.sel = 0
+	m.focus = paneOplog
+	m = moveSelection(m, +1)
+	if got := m.oplog.SelectedID(); got != "bbbb33334444" {
+		t.Errorf("Oplog focus +1: oplog.SelectedID = %q, want bbbb33334444", got)
+	}
+	if m.log.sel != 0 {
+		t.Errorf("Oplog focus +1: log.sel = %d, want 0 (log untouched)", m.log.sel)
 	}
 }
