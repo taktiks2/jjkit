@@ -172,3 +172,43 @@ func BookmarkMove(name, to string) error {
 	}
 	return nil
 }
+
+func opLogArgs(template string) []string {
+	return []string{"op", "log", "--no-pager", "--color", "always", "-T", template}
+}
+
+// OpLogRaw は指定テンプレートで jj op log を実行し、生バイト（ANSI 入り）を返す。
+// jjop.Parse でセンチネル付きテンプレートを処理する前提。
+func OpLogRaw(template string) ([]byte, error) {
+	out, err := exec.Command("jj", opLogArgs(template)...).Output()
+	if err != nil {
+		return nil, wrap("jj op log", err)
+	}
+	return out, nil
+}
+
+func undoArgs() []string {
+	return []string{"undo", "--no-pager"}
+}
+
+// Undo は直前の operation を取り消す。引数は取らない（jj undo は常に最新 op を対象とする）。
+func Undo() error {
+	_, err := exec.Command("jj", undoArgs()...).Output()
+	if err != nil {
+		return wrap("jj undo", err)
+	}
+	return nil
+}
+
+func opRestoreArgs(opID string) []string {
+	return []string{"op", "restore", "--no-pager", opID}
+}
+
+// OpRestore は指定 operation 時点のリポ状態へ巻き戻す（abandon / rebase 等の救済路）。
+func OpRestore(opID string) error {
+	_, err := exec.Command("jj", opRestoreArgs(opID)...).Output()
+	if err != nil {
+		return wrap("jj op restore", err)
+	}
+	return nil
+}
